@@ -23,6 +23,7 @@ import com.clientledger.app.ui.viewmodel.StatsViewModel
 import java.time.LocalDate
 
 sealed class MainScreenDestination(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    object Today : MainScreenDestination("today", "Сегодня", Icons.Default.Event)
     object Clients : MainScreenDestination("clients", "Клиенты", Icons.Default.Person)
     object Calendar : MainScreenDestination("calendar", "Календарь", Icons.Default.CalendarToday)
     object Stats : MainScreenDestination("stats", "Статистика", Icons.Default.BarChart)
@@ -35,6 +36,7 @@ fun MainScreen(
     onClientClick: (Long) -> Unit,
     onAddClient: () -> Unit,
     onDateClick: (LocalDate) -> Unit,
+    onAppointmentClick: (Long) -> Unit,
     onAddAppointment: () -> Unit,
     onAddExpense: () -> Unit
 ) {
@@ -43,6 +45,7 @@ fun MainScreen(
     val currentRoute = navBackStackEntry?.destination?.route
 
     val destinations = listOf(
+        MainScreenDestination.Today,
         MainScreenDestination.Clients,
         MainScreenDestination.Calendar,
         MainScreenDestination.Stats
@@ -72,9 +75,20 @@ fun MainScreen(
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = MainScreenDestination.Clients.route,
+            startDestination = MainScreenDestination.Today.route,
             modifier = Modifier.padding(paddingValues)
         ) {
+            composable(MainScreenDestination.Today.route) {
+                // Экран "Сегодня" - расписание текущего дня
+                val today = LocalDate.now()
+                com.clientledger.app.ui.screen.calendar.DayScheduleScreen(
+                    date = today,
+                    repository = repository,
+                    onBack = { /* Не нужен, так как это главный экран */ },
+                    onAppointmentClick = onAppointmentClick
+                )
+            }
+            
             composable(MainScreenDestination.Clients.route) {
                 ClientsScreen(
                     onClientClick = onClientClick,

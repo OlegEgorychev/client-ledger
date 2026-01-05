@@ -80,6 +80,9 @@ fun AppNavigation(repository: LedgerRepository) {
                 onDateClick = { date ->
                     navController.navigate("day_schedule/${date.toString()}")
                 },
+                onAppointmentClick = { appointmentId ->
+                    navController.navigate("appointment_details/$appointmentId")
+                },
                 onAddAppointment = {
                     navController.navigate("appointment_edit/null/${LocalDate.now().toString()}")
                 },

@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 
 data class AppointmentWithClient(
     val appointment: AppointmentEntity,
@@ -69,6 +71,86 @@ class DayScheduleViewModel(
     
     fun refresh() {
         loadAppointments()
+    }
+    
+    /**
+     * Найти ближайшую запись для автопрокрутки
+     * @param isToday true если это сегодняшний день
+     * @return индекс записи для прокрутки или null
+     */
+    fun findNearestAppointmentSlot(isToday: Boolean): Int? {
+        val appointments = _uiState.value.appointments
+        if (appointments.isEmpty()) {
+            return null
+        }
+        
+        if (isToday) {
+            val now = LocalTime.now()
+            val nowMinutes = now.hour * 60 + now.minute
+            
+            // Ищем запись, которая сейчас идет
+            val currentAppointment = appointments.firstOrNull { appointment ->
+                val dateTime = com.clientledger.app.util.DateUtils.dateTimeToLocalDateTime(appointment.appointment.startsAt)
+                val startMinutes = dateTime.hour * 60 + dateTime.minute
+                val endMinutes = startMinutes + appointment.appointment.durationMinutes
+                nowMinutes >= startMinutes && nowMinutes < endMinutes
+            }
+            
+            if (currentAppointment != null) {
+                return appointments.indexOf(currentAppointment)
+            }
+            
+            // Ищем следующую ближайшую будущую запись
+            val nextAppointment = appointments.firstOrNull { appointment ->
+                val dateTime = com.clientledger.app.util.DateUtils.dateTimeToLocalDateTime(appointment.appointment.startsAt)
+                val startMinutes = dateTime.hour * 60 + dateTime.minute
+                startMinutes > nowMinutes
+            }
+            
+            if (nextAppointment != null) {
+                return appointments.indexOf(nextAppointment)
+            }
+            
+            // Если будущих нет, возвращаем последнюю запись
+            return appointments.size - 1
+        } else {
+            // Для не сегодняшнего дня - первая запись
+            return 0
+        }
+    }
+    
+    /**
+     * Получить offset для прокрутки к ближайшей записи или текущему времени
+     * @param isToday true если это сегодняшний день
+     * @param slotHeightPx высота одного слота в пикселях
+     * @return offset в пикселях для прокрутки
+     */
+    fun getScrollOffset(isToday: Boolean, slotHeightPx: Float): Float {
+        val appointments = _uiState.value.appointments
+        val slotIndex = findNearestAppointmentSlot(isToday)
+        
+        if (slotIndex != null && slotIndex < appointments.size) {
+            val appointment = appointments[slotIndex]
+            val dateTime = com.clientledger.app.util.DateUtils.dateTimeToLocalDateTime(appointment.appointment.startsAt)
+            val startMinutes = dateTime.hour * 60 + dateTime.minute
+            val normalizedStartMinutes = (startMinutes / 5) * 5 // Нормализуем к 5-минутным слотам
+            val startSlot = normalizedStartMinutes / 5
+            // Прокручиваем немного выше записи (на 2 часа назад)
+            val scrollSlot = maxOf(0, startSlot - 24) // 24 слота = 2 часа
+            return scrollSlot * slotHeightPx
+        }
+        
+        // Если записей нет, прокручиваем к текущему времени (для сегодня) или к 08:00 (для другого дня)
+        if (isToday) {
+            val now = LocalTime.now()
+            val nowMinutes = now.hour * 60 + now.minute
+            val normalizedMinutes = (nowMinutes / 5) * 5
+            val scrollSlot = maxOf(0, (normalizedMinutes / 5) - 24) // 2 часа назад
+            return scrollSlot * slotHeightPx
+        } else {
+            // Для другого дня - к 08:00 (96 слотов = 8 часов * 12 слотов)
+            return 96f * slotHeightPx
+        }
     }
 }
 

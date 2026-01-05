@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import kotlinx.coroutines.delay
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
@@ -16,6 +17,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -51,14 +54,18 @@ fun DayScheduleScreen(
         factory = DayScheduleViewModelFactory(date, repository)
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isToday = date == LocalDate.now()
+    val showBackButton = !isToday // Не показываем кнопку "Назад" для экрана "Сегодня"
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(DateUtils.formatDate(date)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                    if (showBackButton) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                        }
                     }
                 }
             )
@@ -96,6 +103,8 @@ fun DayScheduleScreen(
         } else {
             DayScheduleContent(
                 appointments = uiState.appointments,
+                isToday = isToday,
+                viewModel = viewModel,
                 onAppointmentClick = { appointmentId ->
                     onAppointmentClick(appointmentId)
                 },
@@ -108,6 +117,8 @@ fun DayScheduleScreen(
 @Composable
 fun DayScheduleContent(
     appointments: List<AppointmentWithClient>,
+    isToday: Boolean,
+    viewModel: DayScheduleViewModel,
     onAppointmentClick: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -122,15 +133,24 @@ fun DayScheduleContent(
     // Общая высота дня (288 слотов по 5 минут)
     val totalHeight = (SLOTS_PER_DAY * SLOT_HEIGHT_DP).dp
     val scrollState = rememberScrollState()
+    
+    // Автопрокрутка к ближайшей записи при открытии экрана или обновлении записей
+    LaunchedEffect(appointments.size, isToday) {
+        delay(150) // Небольшая задержка для завершения рендеринга
+        if (appointments.isNotEmpty() || isToday) {
+            val scrollOffset = viewModel.getScrollOffset(isToday, slotHeightPx)
+            scrollState.scrollTo(scrollOffset.toInt())
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxSize()
         ) {
-            // Левая колонка с часами
+            // Левая колонка с часами (уменьшенная ширина)
             Box(
                 modifier = Modifier
-                    .width(60.dp)
+                    .width(56.dp)
                     .fillMaxHeight()
             ) {
                 Column(
@@ -139,11 +159,16 @@ fun DayScheduleContent(
                         .verticalScroll(scrollState)
                 ) {
                     TimeColumn(
+                        slotHeightPx = slotHeightPx,
                         hourHeight = hourHeight,
+                        density = density,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
+            
+            // Gutter (небольшой отступ между временем и сеткой)
+            Spacer(modifier = Modifier.width(8.dp))
 
             // Правая колонка с временной сеткой и записями
             Box(
@@ -188,23 +213,46 @@ fun DayScheduleContent(
 
 @Composable
 fun TimeColumn(
+    slotHeightPx: Float,
     hourHeight: androidx.compose.ui.unit.Dp,
+    density: androidx.compose.ui.unit.Density,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
-        repeat(24) { hour ->
-            Box(
+    val colorScheme = MaterialTheme.colorScheme
+    val textStyle = MaterialTheme.typography.bodySmall
+    val textMeasurer = rememberTextMeasurer()
+    
+    // Измеряем высоту текста для выравнивания базовой линии
+    val sampleText = "00:00"
+    val textLayoutResult = textMeasurer.measure(sampleText, textStyle)
+    val textHeightPx = textLayoutResult.size.height.toFloat()
+    val baselineOffsetPx = textLayoutResult.firstBaseline.toFloat()
+    
+    Box(
+        modifier = modifier
+            .height((SLOTS_PER_DAY * slotHeightPx).dp)
+            .fillMaxWidth()
+    ) {
+        // Рисуем метки времени точно на часовых линиях
+        repeat(HOURS_PER_DAY) { hour ->
+            // Y-позиция часовой линии в пикселях (единый расчет с TimeGrid)
+            val hourSlotIndex = hour * SLOTS_PER_HOUR
+            val yPx = hourSlotIndex * slotHeightPx
+            
+            // Выравниваем базовую линию текста с часовой линией
+            // offset = yPx - baselineOffsetPx (чтобы базовая линия была на yPx)
+            val textOffsetPx = yPx - baselineOffsetPx
+            val textOffsetDp = with(density) { textOffsetPx.toDp() }
+            
+            Text(
+                text = String.format("%02d:00", hour),
+                style = textStyle,
+                color = colorScheme.onSurfaceVariant,
                 modifier = Modifier
+                    .offset(y = textOffsetDp)
                     .fillMaxWidth()
-                    .height(hourHeight),
-                contentAlignment = Alignment.TopStart
-            ) {
-                Text(
-                    text = String.format("%02d:00", hour),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+                    .padding(start = 8.dp)
+            )
         }
     }
 }

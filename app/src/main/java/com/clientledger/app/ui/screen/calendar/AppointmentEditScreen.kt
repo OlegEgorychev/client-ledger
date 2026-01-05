@@ -554,8 +554,8 @@ fun AppointmentEditScreen(
                 }
             }
             
-            // Сообщение об ошибке пересечения времени (показываем под блоком выбора времени)
-            if (invalidField == AppointmentFieldType.TIME_OVERLAP && saveDisabledReason != null) {
+            // Сообщение об ошибке времени (показываем под блоком выбора времени)
+            if ((invalidField == AppointmentFieldType.TIME_RANGE || invalidField == AppointmentFieldType.TIME_OVERLAP) && saveDisabledReason != null) {
                 Text(
                     text = saveDisabledReason,
                     color = MaterialTheme.colorScheme.error,

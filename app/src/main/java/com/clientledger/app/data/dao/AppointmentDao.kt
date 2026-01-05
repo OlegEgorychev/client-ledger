@@ -71,6 +71,14 @@ interface AppointmentDao {
     )
     suspend fun getWorkingDaysCount(startDate: String, endDate: String): Int
 
+    @Query(
+        """
+        SELECT DISTINCT dateKey FROM appointments 
+        WHERE dateKey >= :startDate AND dateKey <= :endDate
+        """
+    )
+    suspend fun getWorkingDaysInRange(startDate: String, endDate: String): List<String>
+
     @Insert
     suspend fun insertAppointment(appointment: AppointmentEntity): Long
 

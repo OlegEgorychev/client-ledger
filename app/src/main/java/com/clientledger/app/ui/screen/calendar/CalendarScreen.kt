@@ -36,6 +36,11 @@ fun CalendarScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // Обновляем рабочие дни при каждом появлении экрана
+    LaunchedEffect(uiState.currentMonth) {
+        viewModel.refreshWorkingDays()
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("Календарь") })
@@ -61,6 +66,7 @@ fun CalendarScreen(
             // Календарная сетка
             CalendarGrid(
                 month = uiState.currentMonth,
+                workingDays = uiState.workingDays,
                 onDateClick = { date ->
                     viewModel.selectDate(date)
                     onDateClick(date)
@@ -100,6 +106,7 @@ fun MonthHeader(
 @Composable
 fun CalendarGrid(
     month: YearMonth,
+    workingDays: Set<String>,
     onDateClick: (LocalDate) -> Unit
 ) {
     val firstDayOfMonth = month.atDay(1)
@@ -140,10 +147,16 @@ fun CalendarGrid(
                     } else if (currentDay <= daysInMonth) {
                         val date = month.atDay(currentDay)
                         val isToday = date == LocalDate.now()
+                        val dateKey = date.toDateKey()
+                        val hasAppointments = workingDays.contains(dateKey)
+                        // dayOfWeek: 0 = понедельник, 5 = суббота, 6 = воскресенье
+                        val isWeekend = dayOfWeek == 5 || dayOfWeek == 6
                         
                         CalendarDayCell(
                             day = currentDay,
                             isToday = isToday,
+                            hasAppointments = hasAppointments,
+                            isWeekend = isWeekend,
                             onClick = { onDateClick(date) },
                             modifier = Modifier.weight(1f)
                         )
@@ -162,6 +175,8 @@ fun CalendarGrid(
 fun CalendarDayCell(
     day: Int,
     isToday: Boolean,
+    hasAppointments: Boolean,
+    isWeekend: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -169,20 +184,65 @@ fun CalendarDayCell(
         modifier = modifier
             .aspectRatio(1f)
             .padding(4.dp)
-            .clickable(onClick = onClick)
-            .background(
-                color = if (isToday) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .padding(8.dp),
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = day.toString(),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-            color = if (isToday) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-        )
+        // Фон для выходных дней (легкая заливка)
+        if (isWeekend && !isToday) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+            )
+        }
+        
+        // Фон для текущего дня (круг)
+        if (isToday) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize(0.7f)
+                    .background(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(50)
+                    )
+            )
+        }
+        
+        // Текст с числом дня
+        Column(
+            modifier = Modifier.padding(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = day.toString(),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                color = if (isToday) 
+                    MaterialTheme.colorScheme.onPrimary 
+                else 
+                    MaterialTheme.colorScheme.onSurface
+            )
+            
+            // Индикатор рабочих дней (точка)
+            if (hasAppointments) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .background(
+                            color = if (isToday) 
+                                MaterialTheme.colorScheme.onPrimary 
+                            else 
+                                MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(50)
+                        )
+                )
+            }
+        }
     }
 }
 

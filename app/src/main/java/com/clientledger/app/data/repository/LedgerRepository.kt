@@ -88,6 +88,9 @@ class LedgerRepository(
     
     suspend fun getWorkingDaysCount(startDate: String, endDate: String): Int =
         appointmentDao.getWorkingDaysCount(startDate, endDate)
+    
+    suspend fun getWorkingDaysInRange(startDate: String, endDate: String): List<String> =
+        appointmentDao.getWorkingDaysInRange(startDate, endDate)
 }
 
 

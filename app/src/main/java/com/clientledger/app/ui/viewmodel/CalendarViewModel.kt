@@ -19,7 +19,8 @@ data class CalendarUiState(
     val selectedDate: LocalDate? = null,
     val dayAppointments: List<AppointmentEntity> = emptyList(),
     val dayExpenses: List<ExpenseEntity> = emptyList(),
-    val clients: List<ClientEntity> = emptyList()
+    val clients: List<ClientEntity> = emptyList(),
+    val workingDays: Set<String> = emptySet() // dateKey для дней с записями
 )
 
 class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() {
@@ -28,11 +29,29 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
 
     init {
         loadClients()
+        loadWorkingDays(_uiState.value.currentMonth)
     }
 
     fun changeMonth(months: Int) {
         val newMonth = _uiState.value.currentMonth.plusMonths(months.toLong())
         _uiState.value = _uiState.value.copy(currentMonth = newMonth)
+        loadWorkingDays(newMonth)
+    }
+
+    private fun loadWorkingDays(month: YearMonth) {
+        val firstDay = month.atDay(1)
+        val lastDay = month.atEndOfMonth()
+        val startDateKey = firstDay.toDateKey()
+        val endDateKey = lastDay.toDateKey()
+
+        viewModelScope.launch {
+            val workingDaysList = repository.getWorkingDaysInRange(startDateKey, endDateKey)
+            _uiState.value = _uiState.value.copy(workingDays = workingDaysList.toSet())
+        }
+    }
+
+    fun refreshWorkingDays() {
+        loadWorkingDays(_uiState.value.currentMonth)
     }
 
     fun selectDate(date: LocalDate) {

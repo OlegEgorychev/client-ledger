@@ -4,6 +4,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -343,13 +344,39 @@ fun DayScheduleContent(
                             )
                         }
 
-                        // Записи
-                        appointments.forEach { appointmentWithClient ->
+                        // Записи (сортируем по времени начала для правильного определения соседних)
+                        val sortedAppointments = appointments.sortedBy { it.appointment.startsAt }
+                        sortedAppointments.forEachIndexed { index, appointmentWithClient ->
+                            // Вычисляем время окончания текущей записи (в миллисекундах)
+                            val currentStartDateTime = DateUtils.dateTimeToLocalDateTime(appointmentWithClient.appointment.startsAt)
+                            val currentEndDateTime = currentStartDateTime.plusMinutes(
+                                max(15, appointmentWithClient.appointment.durationMinutes).toLong()
+                            )
+                            val currentEndTimeMillis = currentEndDateTime.toMillis()
+                            
+                            // Определяем, есть ли следующая запись, которая начинается сразу после этой
+                            val hasNextAdjacent = index < sortedAppointments.size - 1 && 
+                                sortedAppointments[index + 1].appointment.startsAt == currentEndTimeMillis
+                            
+                            // Определяем, есть ли предыдущая запись, которая заканчивается прямо перед этой
+                            val hasPrevAdjacent = if (index > 0) {
+                                val prevStartDateTime = DateUtils.dateTimeToLocalDateTime(sortedAppointments[index - 1].appointment.startsAt)
+                                val prevEndDateTime = prevStartDateTime.plusMinutes(
+                                    max(15, sortedAppointments[index - 1].appointment.durationMinutes).toLong()
+                                )
+                                val prevEndTimeMillis = prevEndDateTime.toMillis()
+                                appointmentWithClient.appointment.startsAt == prevEndTimeMillis
+                            } else {
+                                false
+                            }
+                            
                             AppointmentCardOnTimeline(
                                 appointment = appointmentWithClient.appointment,
                                 clientName = appointmentWithClient.clientName,
                                 slotHeightPx = slotHeightPx,
                                 density = density,
+                                hasNextAdjacent = hasNextAdjacent,
+                                hasPrevAdjacent = hasPrevAdjacent,
                                 onClick = { onAppointmentClick(appointmentWithClient.appointment.id) }
                             )
                         }
@@ -521,6 +548,8 @@ fun AppointmentCardOnTimeline(
     clientName: String?,
     slotHeightPx: Float,
     density: androidx.compose.ui.unit.Density,
+    hasNextAdjacent: Boolean = false,
+    hasPrevAdjacent: Boolean = false,
     onClick: () -> Unit
 ) {
     val dateTime = DateUtils.dateTimeToLocalDateTime(appointment.startsAt)
@@ -559,6 +588,29 @@ fun AppointmentCardOnTimeline(
     val timeRange = "${String.format("%02d:%02d", displayStartTime.hour, displayStartTime.minute)} - " +
             "${String.format("%02d:%02d", displayEndTime.hour, displayEndTime.minute)}"
 
+    // Определяем скругление углов в зависимости от соседних записей
+    val cornerRadius = 8.dp
+    val shape = when {
+        hasPrevAdjacent && hasNextAdjacent -> RoundedCornerShape(0.dp) // Нет скругления, если есть соседи сверху и снизу
+        hasPrevAdjacent -> RoundedCornerShape(
+            topStart = 0.dp,
+            topEnd = 0.dp,
+            bottomStart = cornerRadius,
+            bottomEnd = cornerRadius
+        ) // Скругление только снизу
+        hasNextAdjacent -> RoundedCornerShape(
+            topStart = cornerRadius,
+            topEnd = cornerRadius,
+            bottomStart = 0.dp,
+            bottomEnd = 0.dp
+        ) // Скругление только сверху
+        else -> RoundedCornerShape(cornerRadius) // Полное скругление
+    }
+    
+    val colorScheme = MaterialTheme.colorScheme
+    val borderColor = colorScheme.outline.copy(alpha = 0.5f)
+    val borderWidth = 1.dp
+    
     // Обертываем в Box для точного позиционирования (используем IntOffset для точности)
     Box(
         modifier = Modifier
@@ -566,15 +618,33 @@ fun AppointmentCardOnTimeline(
             .fillMaxWidth()
             .height(cardHeightDp)
     ) {
+        // Разделитель между соседними записями (если есть следующая запись)
+        if (hasNextAdjacent) {
+            HorizontalDivider(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                color = borderColor,
+                thickness = 1.dp
+            )
+        }
+        
         Card(
             onClick = onClick,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 4.dp),
-            shape = RoundedCornerShape(8.dp),
+                .padding(horizontal = 4.dp)
+                .border(
+                    width = borderWidth,
+                    color = borderColor,
+                    shape = shape
+                ),
+            shape = shape,
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
+                containerColor = colorScheme.primaryContainer
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(
                 modifier = Modifier

@@ -15,6 +15,16 @@ interface AppointmentDao {
     @Query(
         """
         SELECT * FROM appointments 
+        WHERE dateKey = :dateKey 
+        AND (:excludeId IS NULL OR id != :excludeId)
+        ORDER BY startsAt
+        """
+    )
+    suspend fun getAppointmentsByDateExcluding(dateKey: String, excludeId: Long?): List<AppointmentEntity>
+
+    @Query(
+        """
+        SELECT * FROM appointments 
         WHERE dateKey >= :startDate AND dateKey <= :endDate 
         ORDER BY startsAt
         """

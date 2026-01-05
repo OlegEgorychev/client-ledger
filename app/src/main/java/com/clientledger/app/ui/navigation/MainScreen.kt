@@ -151,4 +151,17 @@ class DayScheduleViewModelFactory(
     }
 }
 
+class AppointmentDetailsViewModelFactory(
+    private val appointmentId: Long,
+    private val repository: LedgerRepository
+) : androidx.lifecycle.ViewModelProvider.Factory {
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(com.clientledger.app.ui.viewmodel.AppointmentDetailsViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return com.clientledger.app.ui.viewmodel.AppointmentDetailsViewModel(appointmentId, repository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
+
 

@@ -1,25 +1,37 @@
 package com.clientledger.app.ui.screen.calendar
 
+import android.util.Log
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.repository.LedgerRepository
+import com.clientledger.app.ui.viewmodel.AppointmentFieldType
 import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.util.*
 import com.clientledger.app.util.MoneyUtils
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.YearMonth
 import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,6 +43,8 @@ fun AppointmentEditScreen(
     viewModel: CalendarViewModel,
     onBack: () -> Unit
 ) {
+    var selectedDate by remember { mutableStateOf(date) }
+    var showDatePicker by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
     var clientNameText by remember { mutableStateOf("") }
     var selectedClientId by remember { mutableStateOf<Long?>(null) }
@@ -38,17 +52,126 @@ fun AppointmentEditScreen(
     var startMinute by remember { mutableStateOf(0) }
     var endHour by remember { mutableStateOf(13) }
     var endMinute by remember { mutableStateOf(0) }
+    
+    var showStartHourMenu by remember { mutableStateOf(false) }
+    var showStartMinuteMenu by remember { mutableStateOf(false) }
+    var showEndHourMenu by remember { mutableStateOf(false) }
+    var showEndMinuteMenu by remember { mutableStateOf(false) }
+    
+    // Списки для выбора времени
+    val hours = (0..23).toList()
+    val minutes = (0..59 step 5).toList() // Шаг 5 минут: 00, 05, 10, 15, ..., 55
     var incomeRubles by remember { mutableStateOf("") }
     var isPaid by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(false) }
+    var hasTriedToSave by remember { mutableStateOf(false) }
     
     var filteredClients by remember { mutableStateOf<List<ClientEntity>>(emptyList()) }
     var showClientMenu by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
+    
+    // Инициализируем дату и время при первом запуске
+    LaunchedEffect(date) {
+        if (appointmentId == null) {
+            selectedDate = date
+            // Устанавливаем текущее время для новых записей
+            val now = LocalTime.now()
+            startHour = now.hour
+            // Округляем минуты до ближайшего значения с шагом 5
+            startMinute = (now.minute / 5) * 5
+            // Время окончания - на час позже
+            val endTime = now.plusHours(1)
+            endHour = endTime.hour
+            endMinute = (endTime.minute / 5) * 5
+        }
+    }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    
+    // Проверка пересечений времени (suspend функция, вызывается через LaunchedEffect)
+    var hasTimeOverlap by remember { mutableStateOf(false) }
+    
+    LaunchedEffect(selectedDate, startHour, startMinute, endHour, endMinute, appointmentId) {
+        // Проверяем пересечения только если время валидно
+        if (viewModel.validateTimeRange(startHour, startMinute, endHour, endMinute)) {
+            val dateKey = selectedDate.toDateKey()
+            hasTimeOverlap = viewModel.checkTimeOverlap(
+                dateKey = dateKey,
+                startHour = startHour,
+                startMinute = startMinute,
+                endHour = endHour,
+                endMinute = endMinute,
+                excludeAppointmentId = appointmentId
+            )
+        } else {
+            hasTimeOverlap = false
+        }
+    }
+    
+    // Валидация времени
+    val isTimeRangeValid = remember(startHour, startMinute, endHour, endMinute) {
+        viewModel.validateTimeRange(startHour, startMinute, endHour, endMinute)
+    }
+    
+    // Получаем причину блокировки сохранения и проблемное поле из ViewModel
+    val saveDisabledReason = remember(
+        title, clientNameText, selectedClientId, incomeRubles, selectedDate,
+        startHour, startMinute, endHour, endMinute, isTimeRangeValid, hasTimeOverlap
+    ) {
+        viewModel.getSaveDisabledReason(
+            title = title,
+            clientNameText = clientNameText,
+            selectedClientId = selectedClientId,
+            incomeRubles = incomeRubles,
+            dateSelected = selectedDate != null,
+            startHour = startHour,
+            startMinute = startMinute,
+            endHour = endHour,
+            endMinute = endMinute,
+            isTimeRangeValid = isTimeRangeValid,
+            hasTimeOverlap = hasTimeOverlap
+        )
+    }
+    
+    val invalidField = remember(
+        title, clientNameText, selectedClientId, incomeRubles, selectedDate,
+        startHour, startMinute, endHour, endMinute, isTimeRangeValid, hasTimeOverlap
+    ) {
+        viewModel.getInvalidField(
+            title = title,
+            clientNameText = clientNameText,
+            selectedClientId = selectedClientId,
+            incomeRubles = incomeRubles,
+            dateSelected = selectedDate != null,
+            startHour = startHour,
+            startMinute = startMinute,
+            endHour = endHour,
+            endMinute = endMinute,
+            isTimeRangeValid = isTimeRangeValid,
+            hasTimeOverlap = hasTimeOverlap
+        )
+    }
+    
+    val isSaveEnabled = remember(
+        title, clientNameText, selectedClientId, incomeRubles, selectedDate,
+        startHour, startMinute, endHour, endMinute, isTimeRangeValid, hasTimeOverlap
+    ) {
+        viewModel.isSaveEnabled(
+            title = title,
+            clientNameText = clientNameText,
+            selectedClientId = selectedClientId,
+            incomeRubles = incomeRubles,
+            dateSelected = selectedDate != null,
+            startHour = startHour,
+            startMinute = startMinute,
+            endHour = endHour,
+            endMinute = endMinute,
+            isTimeRangeValid = isTimeRangeValid,
+            hasTimeOverlap = hasTimeOverlap
+        )
+    }
     
     // Поиск клиентов при вводе текста или при фокусе на поле
     LaunchedEffect(clientNameText, isFocused) {
@@ -82,12 +205,15 @@ fun AppointmentEditScreen(
                         clientNameText = "${it.lastName} ${it.firstName}"
                     }
                     val dateTime = DateUtils.dateTimeToLocalDateTime(it.startsAt)
+                    selectedDate = dateTime.toLocalDate()
                     startHour = dateTime.hour
-                    startMinute = dateTime.minute
+                    // Округляем минуты до ближайшего значения с шагом 5
+                    startMinute = (dateTime.minute / 5) * 5
                     val duration = it.durationMinutes
                     val endDateTime = dateTime.plusMinutes(duration.toLong())
                     endHour = endDateTime.hour
-                    endMinute = endDateTime.minute
+                    // Округляем минуты до ближайшего значения с шагом 5
+                    endMinute = (endDateTime.minute / 5) * 5
                     incomeRubles = MoneyUtils.centsToRubles(it.incomeCents).toString()
                     isPaid = it.isPaid
                 }
@@ -114,14 +240,64 @@ fun AppointmentEditScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Название *") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("Стрижка") },
+                    isError = invalidField == AppointmentFieldType.TITLE,
+                    colors = if (invalidField == AppointmentFieldType.TITLE) {
+                        OutlinedTextFieldDefaults.colors(
+                            errorBorderColor = MaterialTheme.colorScheme.error,
+                            errorLabelColor = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        OutlinedTextFieldDefaults.colors()
+                    }
+                )
+
+            // Выбор даты
+            Text("Дата записи *", style = MaterialTheme.typography.titleSmall)
             OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("Название *") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("Стрижка") }
+                value = DateUtils.formatDate(selectedDate),
+                onValueChange = { }, // Только для чтения
+                readOnly = true,
+                label = { Text("Дата") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showDatePicker = true },
+                trailingIcon = {
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.CalendarToday,
+                            contentDescription = "Выбрать дату"
+                        )
+                    }
+                },
+                isError = invalidField == AppointmentFieldType.DATE,
+                colors = if (invalidField == AppointmentFieldType.DATE) {
+                    OutlinedTextFieldDefaults.colors(
+                        errorBorderColor = MaterialTheme.colorScheme.error,
+                        errorLabelColor = MaterialTheme.colorScheme.error
+                    )
+                } else {
+                    OutlinedTextFieldDefaults.colors()
+                }
             )
+
+            // DatePicker Dialog
+            if (showDatePicker) {
+                DatePickerDialog(
+                    initialDate = selectedDate,
+                    onDateSelected = { newDate ->
+                        selectedDate = newDate
+                        showDatePicker = false
+                    },
+                    onDismiss = { showDatePicker = false }
+                )
+            }
 
             // Выбор клиента
             Text("Клиент *")
@@ -144,7 +320,16 @@ fun AppointmentEditScreen(
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = showClientMenu)
                     },
-                    placeholder = { Text("Введите имя или фамилию") }
+                    placeholder = { Text("Введите имя или фамилию") },
+                    isError = invalidField == AppointmentFieldType.CLIENT,
+                    colors = if (invalidField == AppointmentFieldType.CLIENT) {
+                        OutlinedTextFieldDefaults.colors(
+                            errorBorderColor = MaterialTheme.colorScheme.error,
+                            errorLabelColor = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        OutlinedTextFieldDefaults.colors()
+                    }
                 )
                 ExposedDropdownMenu(
                     expanded = showClientMenu,
@@ -169,20 +354,101 @@ fun AppointmentEditScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(
-                    value = startHour.toString().padStart(2, '0'),
-                    onValueChange = { it.toIntOrNull()?.let { h -> if (h in 0..23) startHour = h } },
-                    label = { Text("Часы") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = startMinute.toString().padStart(2, '0'),
-                    onValueChange = { it.toIntOrNull()?.let { m -> if (m in 0..59) startMinute = m } },
-                    label = { Text("Минуты") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
+                // Выбор часов начала
+                ExposedDropdownMenuBox(
+                    expanded = showStartHourMenu,
+                    onExpandedChange = { showStartHourMenu = it },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = startHour.toString().padStart(2, '0'),
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Часы") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = showStartHourMenu)
+                        },
+                        isError = invalidField == AppointmentFieldType.START_TIME || 
+                                  invalidField == AppointmentFieldType.TIME_RANGE || 
+                                  invalidField == AppointmentFieldType.TIME_OVERLAP,
+                        colors = if (invalidField == AppointmentFieldType.START_TIME || 
+                                    invalidField == AppointmentFieldType.TIME_RANGE || 
+                                    invalidField == AppointmentFieldType.TIME_OVERLAP) {
+                            OutlinedTextFieldDefaults.colors(
+                                errorBorderColor = MaterialTheme.colorScheme.error,
+                                errorLabelColor = MaterialTheme.colorScheme.error
+                            )
+                        } else {
+                            OutlinedTextFieldDefaults.colors()
+                        }
+                    )
+                    ExposedDropdownMenu(
+                        expanded = showStartHourMenu,
+                        onDismissRequest = { showStartHourMenu = false }
+                    ) {
+                        hours.forEach { hour ->
+                            DropdownMenuItem(
+                                text = { Text(hour.toString().padStart(2, '0')) },
+                                onClick = {
+                                    startHour = hour
+                                    showStartHourMenu = false
+                                    isLoading = false // Сбрасываем при изменении времени
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                // Выбор минут начала
+                ExposedDropdownMenuBox(
+                    expanded = showStartMinuteMenu,
+                    onExpandedChange = { showStartMinuteMenu = it },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = startMinute.toString().padStart(2, '0'),
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Минуты") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = showStartMinuteMenu)
+                        },
+                        isError = invalidField == AppointmentFieldType.START_TIME || 
+                                  invalidField == AppointmentFieldType.TIME_RANGE || 
+                                  invalidField == AppointmentFieldType.TIME_OVERLAP,
+                        colors = if (invalidField == AppointmentFieldType.START_TIME || 
+                                    invalidField == AppointmentFieldType.TIME_RANGE || 
+                                    invalidField == AppointmentFieldType.TIME_OVERLAP) {
+                            OutlinedTextFieldDefaults.colors(
+                                errorBorderColor = MaterialTheme.colorScheme.error,
+                                errorLabelColor = MaterialTheme.colorScheme.error
+                            )
+                        } else {
+                            OutlinedTextFieldDefaults.colors()
+                        }
+                    )
+                    ExposedDropdownMenu(
+                        expanded = showStartMinuteMenu,
+                        onDismissRequest = { showStartMinuteMenu = false }
+                    ) {
+                        minutes.forEach { minute ->
+                            DropdownMenuItem(
+                                text = { Text(minute.toString().padStart(2, '0')) },
+                                onClick = {
+                                    startMinute = minute
+                                    showStartMinuteMenu = false
+                                    isLoading = false // Сбрасываем при изменении времени
+                                }
+                            )
+                        }
+                    }
+                }
             }
 
             // Конец сеанса
@@ -191,29 +457,129 @@ fun AppointmentEditScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(
-                    value = endHour.toString().padStart(2, '0'),
-                    onValueChange = { it.toIntOrNull()?.let { h -> if (h in 0..23) endHour = h } },
-                    label = { Text("Часы") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = endMinute.toString().padStart(2, '0'),
-                    onValueChange = { it.toIntOrNull()?.let { m -> if (m in 0..59) endMinute = m } },
-                    label = { Text("Минуты") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
+                // Выбор часов окончания
+                ExposedDropdownMenuBox(
+                    expanded = showEndHourMenu,
+                    onExpandedChange = { showEndHourMenu = it },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = endHour.toString().padStart(2, '0'),
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Часы") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = showEndHourMenu)
+                        },
+                        isError = invalidField == AppointmentFieldType.END_TIME || 
+                                  invalidField == AppointmentFieldType.TIME_RANGE || 
+                                  invalidField == AppointmentFieldType.TIME_OVERLAP,
+                        colors = if (invalidField == AppointmentFieldType.END_TIME || 
+                                    invalidField == AppointmentFieldType.TIME_RANGE || 
+                                    invalidField == AppointmentFieldType.TIME_OVERLAP) {
+                            OutlinedTextFieldDefaults.colors(
+                                errorBorderColor = MaterialTheme.colorScheme.error,
+                                errorLabelColor = MaterialTheme.colorScheme.error
+                            )
+                        } else {
+                            OutlinedTextFieldDefaults.colors()
+                        }
+                    )
+                    ExposedDropdownMenu(
+                        expanded = showEndHourMenu,
+                        onDismissRequest = { showEndHourMenu = false }
+                    ) {
+                        hours.forEach { hour ->
+                            DropdownMenuItem(
+                                text = { Text(hour.toString().padStart(2, '0')) },
+                                onClick = {
+                                    endHour = hour
+                                    showEndHourMenu = false
+                                    isLoading = false // Сбрасываем при изменении времени
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                // Выбор минут окончания
+                ExposedDropdownMenuBox(
+                    expanded = showEndMinuteMenu,
+                    onExpandedChange = { showEndMinuteMenu = it },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = endMinute.toString().padStart(2, '0'),
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Минуты") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = showEndMinuteMenu)
+                        },
+                        isError = invalidField == AppointmentFieldType.END_TIME || 
+                                  invalidField == AppointmentFieldType.TIME_RANGE || 
+                                  invalidField == AppointmentFieldType.TIME_OVERLAP,
+                        colors = if (invalidField == AppointmentFieldType.END_TIME || 
+                                    invalidField == AppointmentFieldType.TIME_RANGE || 
+                                    invalidField == AppointmentFieldType.TIME_OVERLAP) {
+                            OutlinedTextFieldDefaults.colors(
+                                errorBorderColor = MaterialTheme.colorScheme.error,
+                                errorLabelColor = MaterialTheme.colorScheme.error
+                            )
+                        } else {
+                            OutlinedTextFieldDefaults.colors()
+                        }
+                    )
+                    ExposedDropdownMenu(
+                        expanded = showEndMinuteMenu,
+                        onDismissRequest = { showEndMinuteMenu = false }
+                    ) {
+                        minutes.forEach { minute ->
+                            DropdownMenuItem(
+                                text = { Text(minute.toString().padStart(2, '0')) },
+                                onClick = {
+                                    endMinute = minute
+                                    showEndMinuteMenu = false
+                                    isLoading = false // Сбрасываем при изменении времени
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Сообщение об ошибке пересечения времени (показываем под блоком выбора времени)
+            if (invalidField == AppointmentFieldType.TIME_OVERLAP && saveDisabledReason != null) {
+                Text(
+                    text = saveDisabledReason,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 16.dp, top = 4.dp)
                 )
             }
-
+            
             OutlinedTextField(
                 value = incomeRubles,
                 onValueChange = { if (it.all { c -> c.isDigit() || c == '.' || c == ',' }) incomeRubles = it },
                 label = { Text("Сумма (рубли) *") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                placeholder = { Text("1500") }
+                placeholder = { Text("1500") },
+                isError = invalidField == AppointmentFieldType.INCOME,
+                colors = if (invalidField == AppointmentFieldType.INCOME) {
+                    OutlinedTextFieldDefaults.colors(
+                        errorBorderColor = MaterialTheme.colorScheme.error,
+                        errorLabelColor = MaterialTheme.colorScheme.error
+                    )
+                } else {
+                    OutlinedTextFieldDefaults.colors()
+                }
             )
 
             Row(
@@ -227,93 +593,126 @@ fun AppointmentEditScreen(
                 Text("Оплачено")
             }
 
+
             Button(
                 onClick = {
-                    if (title.isBlank() || clientNameText.isBlank() || incomeRubles.isBlank()) {
+                    Log.d("AppointmentEdit", "Button onClick triggered")
+                    Log.d("AppointmentEdit", "isLoading: $isLoading, isSaveEnabled: $isSaveEnabled")
+                    Log.d("AppointmentEdit", "title: '$title', clientNameText: '$clientNameText', incomeRubles: '$incomeRubles'")
+                    
+                    // Проверка валидности формы
+                    if (!isSaveEnabled) {
+                        Log.w("AppointmentEdit", "Validation failed: form is invalid")
+                        Log.w("AppointmentEdit", "Save disabled reason: $saveDisabledReason")
                         return@Button
                     }
 
+                    Log.d("AppointmentEdit", "All validations passed, starting save")
                     scope.launch {
-                        isLoading = true
-                        
-                        // Определяем ID клиента: если выбран из списка - используем его, иначе создаем нового
-                        var clientId = selectedClientId
-                        if (clientId == null) {
-                            // Создаем нового клиента
-                            // Парсим имя: если два слова - первое фамилия, второе имя; иначе - все в имя
-                            val nameParts = clientNameText.trim().split("\\s+".toRegex())
-                            val firstName: String
-                            val lastName: String
-                            if (nameParts.size >= 2) {
-                                lastName = nameParts[0]
-                                firstName = nameParts.subList(1, nameParts.size).joinToString(" ")
-                            } else {
-                                lastName = clientNameText.trim()
-                                firstName = clientNameText.trim()
+                        try {
+                            isLoading = true
+                            
+                            Log.d("AppointmentEdit", "Save button clicked - starting save process")
+                            
+                            // Определяем ID клиента: если выбран из списка - используем его, иначе создаем нового
+                            var clientId = selectedClientId
+                            if (clientId == null) {
+                                Log.d("AppointmentEdit", "Creating new client")
+                                // Создаем нового клиента
+                                // Парсим имя: если два слова - первое фамилия, второе имя; иначе - все в имя
+                                val nameParts = clientNameText.trim().split("\\s+".toRegex())
+                                val firstName: String
+                                val lastName: String
+                                if (nameParts.size >= 2) {
+                                    lastName = nameParts[0]
+                                    firstName = nameParts.subList(1, nameParts.size).joinToString(" ")
+                                } else {
+                                    lastName = clientNameText.trim()
+                                    firstName = clientNameText.trim()
+                                }
+                                
+                                val now = System.currentTimeMillis()
+                                // Генерируем временный телефон на основе timestamp для уникальности
+                                val tempPhone = "+7${now % 10000000000}"
+                                val newClient = ClientEntity(
+                                    firstName = firstName,
+                                    lastName = lastName,
+                                    gender = "male", // По умолчанию
+                                    phone = tempPhone,
+                                    createdAt = now,
+                                    updatedAt = now
+                                )
+                                clientId = repository.insertClient(newClient)
+                                Log.d("AppointmentEdit", "New client created with ID: $clientId")
                             }
                             
-                            val now = System.currentTimeMillis()
-                            // Генерируем временный телефон на основе timestamp для уникальности
-                            val tempPhone = "+7${now % 10000000000}"
-                            val newClient = ClientEntity(
-                                firstName = firstName,
-                                lastName = lastName,
-                                gender = "male", // По умолчанию
-                                phone = tempPhone,
-                                createdAt = now,
-                                updatedAt = now
-                            )
-                            clientId = repository.insertClient(newClient)
-                        }
-                        
-                        val incomeCents = MoneyUtils.rublesToCents(incomeRubles.replace(',', '.').toDoubleOrNull() ?: 0.0)
-                        val startsAt = date.atTime(LocalTime.of(startHour, startMinute)).toMillis()
-                        
-                        // Вычисляем длительность в минутах
-                        val startTotalMinutes = startHour * 60 + startMinute
-                        val endTotalMinutes = endHour * 60 + endMinute
-                        val durationMinutes = if (endTotalMinutes >= startTotalMinutes) {
-                            endTotalMinutes - startTotalMinutes
-                        } else {
-                            // Если конец меньше начала, считаем что это следующий день (24 часа - начало + конец)
-                            (24 * 60 - startTotalMinutes) + endTotalMinutes
-                        }
-                        
-                        val appointment = if (appointmentId == null) {
-                            AppointmentEntity(
-                                clientId = clientId!!,
-                                title = title,
-                                startsAt = startsAt,
-                                dateKey = date.toDateKey(),
-                                durationMinutes = max(15, durationMinutes), // Минимум 15 минут
-                                incomeCents = incomeCents,
-                                isPaid = isPaid,
-                                createdAt = System.currentTimeMillis()
-                            )
-                        } else {
-                            AppointmentEntity(
-                                id = appointmentId,
-                                clientId = clientId!!,
-                                title = title,
-                                startsAt = startsAt,
-                                dateKey = date.toDateKey(),
-                                durationMinutes = max(15, durationMinutes), // Минимум 15 минут
-                                incomeCents = incomeCents,
-                                isPaid = isPaid,
-                                createdAt = System.currentTimeMillis()
-                            )
-                        }
+                            val incomeCents = MoneyUtils.rublesToCents(incomeRubles.replace(',', '.').toDoubleOrNull() ?: 0.0)
+                            val startsAt = selectedDate.atTime(LocalTime.of(startHour, startMinute)).toMillis()
+                            
+                            // Вычисляем длительность в минутах
+                            val startTotalMinutes = startHour * 60 + startMinute
+                            val endTotalMinutes = endHour * 60 + endMinute
+                            val durationMinutes = if (endTotalMinutes >= startTotalMinutes) {
+                                endTotalMinutes - startTotalMinutes
+                            } else {
+                                // Если конец меньше начала, считаем что это следующий день (24 часа - начало + конец)
+                                (24 * 60 - startTotalMinutes) + endTotalMinutes
+                            }
+                            
+                            val appointment = if (appointmentId == null) {
+                                AppointmentEntity(
+                                    clientId = clientId!!,
+                                    title = title,
+                                    startsAt = startsAt,
+                                    dateKey = selectedDate.toDateKey(),
+                                    durationMinutes = max(15, durationMinutes), // Минимум 15 минут
+                                    incomeCents = incomeCents,
+                                    isPaid = isPaid,
+                                    createdAt = System.currentTimeMillis()
+                                )
+                            } else {
+                                AppointmentEntity(
+                                    id = appointmentId,
+                                    clientId = clientId!!,
+                                    title = title,
+                                    startsAt = startsAt,
+                                    dateKey = selectedDate.toDateKey(),
+                                    durationMinutes = max(15, durationMinutes), // Минимум 15 минут
+                                    incomeCents = incomeCents,
+                                    isPaid = isPaid,
+                                    createdAt = System.currentTimeMillis()
+                                )
+                            }
 
-                        if (appointmentId == null) {
-                            viewModel.insertAppointment(appointment)
-                        } else {
-                            viewModel.updateAppointment(appointment)
+                            Log.d("AppointmentEdit", "Saving appointment: ${if (appointmentId == null) "INSERT" else "UPDATE"}")
+                            
+                            if (appointmentId == null) {
+                                viewModel.insertAppointment(appointment)
+                                Log.d("AppointmentEdit", "Appointment inserted successfully")
+                                // Обновляем рабочие дни после добавления записи
+                                viewModel.refreshWorkingDays()
+                            } else {
+                                viewModel.updateAppointment(appointment)
+                                Log.d("AppointmentEdit", "Appointment updated successfully")
+                                // Обновляем рабочие дни после обновления записи
+                                viewModel.refreshWorkingDays()
+                            }
+                            
+                            Log.d("AppointmentEdit", "Save completed, navigating back")
+                            hasTriedToSave = false // Сбрасываем флаг при успешном сохранении
+                            onBack()
+                        } catch (e: Exception) {
+                            Log.e("AppointmentEdit", "Error saving appointment", e)
+                            // В будущем здесь можно показать Snackbar с ошибкой
+                            // Для отладки просто логируем
+                        } finally {
+                            isLoading = false
+                            Log.d("AppointmentEdit", "Save process finished, isLoading = false")
                         }
-                        onBack()
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                enabled = !isLoading && isSaveEnabled
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp))
@@ -321,7 +720,240 @@ fun AppointmentEditScreen(
                     Text("Сохранить")
                 }
             }
+            
+            // Отображение подсказки, если кнопка неактивна
+            if (!isSaveEnabled && saveDisabledReason != null) {
+                Text(
+                    text = saveDisabledReason,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
         }
+    }
+}
+
+@Composable
+fun DatePickerDialog(
+    initialDate: LocalDate,
+    onDateSelected: (LocalDate) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var currentMonth by remember { mutableStateOf(YearMonth.from(initialDate)) }
+    var selectedDate by remember { mutableStateOf(initialDate) }
+    
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Выберите дату",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                // Навигация по месяцам
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { currentMonth = currentMonth.minusMonths(1) }) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Предыдущий месяц"
+                        )
+                    }
+                    Text(
+                        text = DateUtils.formatMonth(currentMonth),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = { currentMonth = currentMonth.plusMonths(1) }) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = "Следующий месяц"
+                        )
+                    }
+                }
+                
+                // Календарь
+                DatePickerCalendar(
+                    month = currentMonth,
+                    selectedDate = selectedDate,
+                    initialDate = initialDate,
+                    onDateClick = { date ->
+                        selectedDate = date
+                        // Если выбранная дата в другом месяце, переключаем месяц
+                        val dateMonth = YearMonth.from(date)
+                        if (dateMonth != currentMonth) {
+                            currentMonth = dateMonth
+                        }
+                    }
+                )
+                
+                // Кнопки
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Отмена")
+                    }
+                    Button(
+                        onClick = {
+                            onDateSelected(selectedDate)
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Выбрать")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DatePickerCalendar(
+    month: YearMonth,
+    selectedDate: LocalDate,
+    initialDate: LocalDate,
+    onDateClick: (LocalDate) -> Unit
+) {
+    val firstDayOfMonth = month.atDay(1)
+    val firstDayOfWeek = (firstDayOfMonth.dayOfWeek.value + 6) % 7 // Понедельник = 0
+    val daysInMonth = month.lengthOfMonth()
+    
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Заголовки дней недели
+        Row(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            val dayNames = listOf("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+            dayNames.forEach { dayName ->
+                Text(
+                    text = dayName,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Календарная сетка
+        var currentDay = 1
+        repeat(6) { week ->
+            Row(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                repeat(7) { dayOfWeek ->
+                    if (week == 0 && dayOfWeek < firstDayOfWeek) {
+                        // Пустая ячейка перед первым днем месяца
+                        Spacer(modifier = Modifier.weight(1f))
+                    } else if (currentDay <= daysInMonth) {
+                        val date = month.atDay(currentDay)
+                        val isSelected = date == selectedDate
+                        val isToday = date == LocalDate.now()
+                        val isWeekend = dayOfWeek == 5 || dayOfWeek == 6
+                        
+                        DatePickerDayCell(
+                            day = currentDay,
+                            isSelected = isSelected,
+                            isToday = isToday,
+                            isWeekend = isWeekend,
+                            onClick = { onDateClick(date) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        currentDay++
+                    } else {
+                        // Пустая ячейка после последнего дня месяца
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DatePickerDayCell(
+    day: Int,
+    isSelected: Boolean,
+    isToday: Boolean,
+    isWeekend: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .padding(2.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        // Фон для выбранной даты
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize(0.8f)
+                    .background(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(50)
+                    )
+            )
+        } else if (isToday && !isSelected) {
+            // Фон для текущего дня (если не выбран)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize(0.7f)
+                    .background(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(50)
+                    )
+            )
+        } else if (isWeekend && !isSelected && !isToday) {
+            // Фон для выходных дней
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+            )
+        }
+        
+        Text(
+            text = day.toString(),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
+            color = if (isSelected) 
+                MaterialTheme.colorScheme.onPrimary 
+            else if (isToday && !isSelected)
+                MaterialTheme.colorScheme.onPrimaryContainer
+            else 
+                MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

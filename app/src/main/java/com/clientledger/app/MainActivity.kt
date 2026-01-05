@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.navigation.MainScreen
 import com.clientledger.app.ui.screen.SplashScreen
+import com.clientledger.app.ui.screen.calendar.AppointmentDetailsScreen
 import com.clientledger.app.ui.screen.calendar.AppointmentEditScreen
 import com.clientledger.app.ui.screen.calendar.DayDetailScreen
 import com.clientledger.app.ui.screen.calendar.DayScheduleScreen
@@ -80,7 +81,7 @@ fun AppNavigation(repository: LedgerRepository) {
                     navController.navigate("day_schedule/${date.toString()}")
                 },
                 onAddAppointment = {
-                    navController.navigate("appointment_edit/null")
+                    navController.navigate("appointment_edit/null/${LocalDate.now().toString()}")
                 },
                 onAddExpense = {
                     navController.navigate("expense_edit/null")
@@ -126,7 +127,7 @@ fun AppNavigation(repository: LedgerRepository) {
                     repository = repository,
                     onBack = { navController.popBackStack() },
                     onAppointmentClick = { appointmentId ->
-                        navController.navigate("appointment_edit/$appointmentId")
+                        navController.navigate("appointment_details/$appointmentId")
                     }
                 )
             }
@@ -151,7 +152,7 @@ fun AppNavigation(repository: LedgerRepository) {
                         }
                     },
                     onAppointmentClick = { appointmentId ->
-                        navController.navigate("appointment_edit/$appointmentId")
+                        navController.navigate("appointment_details/$appointmentId")
                     },
                     onExpenseClick = { expenseId ->
                         navController.navigate("expense_edit/$expenseId")
@@ -169,7 +170,25 @@ fun AppNavigation(repository: LedgerRepository) {
                     appointmentId = appointmentId,
                     date = localDate,
                     repository = repository,
-                    onBack = { navController.popBackStack() }
+                onBack = {
+                    // Просто возвращаемся назад - если редактировали из details, вернемся на details
+                    navController.popBackStack()
+                }
+                )
+            }
+        }
+
+        composable("appointment_details/{appointmentId}") { backStackEntry ->
+            val appointmentId = backStackEntry.arguments?.getString("appointmentId")?.toLongOrNull()
+            appointmentId?.let { id ->
+                AppointmentDetailsScreen(
+                    appointmentId = id,
+                    repository = repository,
+                    onBack = { navController.popBackStack() },
+                    onEdit = { appointmentId ->
+                        // Получаем дату из appointment для навигации
+                        navController.navigate("appointment_edit/$appointmentId")
+                    }
                 )
             }
         }
@@ -180,7 +199,10 @@ fun AppNavigation(repository: LedgerRepository) {
                 appointmentId = appointmentId,
                 date = LocalDate.now(),
                 repository = repository,
-                onBack = { navController.popBackStack() }
+                onBack = {
+                    // Просто возвращаемся назад - если редактировали из details, вернемся на details
+                    navController.popBackStack()
+                }
             )
         }
 

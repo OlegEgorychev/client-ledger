@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -15,6 +16,7 @@ import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.navigation.ClientsViewModelFactory
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
+import com.clientledger.app.util.DateUtils
 import com.clientledger.app.util.MoneyUtils
 import kotlinx.coroutines.launch
 
@@ -46,7 +48,17 @@ fun ClientDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Детали клиента") },
+                title = { 
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Карточка клиента",
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                },
                 navigationIcon = {
                     TextButton(onClick = onBack) {
                         Text("Назад")
@@ -146,7 +158,12 @@ fun ClientInfoCard(
                 "female" -> "Жен"
                 else -> "Муж" // Fallback для старых данных
             })
-            client.birthDate?.let { InfoRow("Дата рождения", it) }
+            client.birthDate?.let { 
+                val birthDateLocal = DateUtils.parseBirthDate(it)
+                birthDateLocal?.let { date ->
+                    InfoRow("Дата рождения", DateUtils.formatBirthDate(date))
+                }
+            }
             InfoRow("Телефон", client.phone?.takeIf { it.isNotBlank() } ?: "Не указан")
             client.telegram?.let { InfoRow("Telegram", it) }
             client.notes?.let { InfoRow("Заметки", it) }

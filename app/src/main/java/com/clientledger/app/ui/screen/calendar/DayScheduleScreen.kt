@@ -202,10 +202,8 @@ fun DayScheduleScreen(
                         }
                 },
                 navigationIcon = {
-                    // Всегда показываем кнопку "Назад" (экран открывается поверх вкладок)
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
-                    }
+                    // Кнопка "Назад" не нужна, так как BottomBar всегда виден
+                    // Пользователь может переключиться на другую вкладку
                 }
             )
         }

@@ -71,7 +71,6 @@ fun AppNavigation(repository: LedgerRepository) {
         composable("main") {
             MainScreen(
                 repository = repository,
-                rootNavController = navController,
                 onClientClick = { clientId ->
                     navController.navigate("client_detail/$clientId")
                 },
@@ -79,8 +78,8 @@ fun AppNavigation(repository: LedgerRepository) {
                     navController.navigate("client_edit")
                 },
                 onDateClick = { date ->
-                    // Навигация на день через root navController
-                    navController.navigate("day/${date.toString()}")
+                    // Навигация на день теперь происходит внутри MainScreen
+                    // Этот колбэк больше не используется, но оставляем для совместимости
                 },
                 onAppointmentClick = { appointmentId ->
                     navController.navigate("appointment_details/$appointmentId")
@@ -92,22 +91,6 @@ fun AppNavigation(repository: LedgerRepository) {
                     navController.navigate("expense_edit/null")
                 }
             )
-        }
-        
-        composable("day/{dateIso}") { backStackEntry ->
-            val dateStr = backStackEntry.arguments?.getString("dateIso")
-            dateStr?.let { date ->
-                val localDate = LocalDate.parse(date)
-                DayScheduleScreen(
-                    date = localDate,
-                    repository = repository,
-                    onBack = { navController.popBackStack() },
-                    onAppointmentClick = { appointmentId ->
-                        navController.navigate("appointment_details/$appointmentId")
-                    },
-                    onDateChange = null // Переключение дней происходит внутри экрана через состояние
-                )
-            }
         }
 
         composable("client_detail/{clientId}") { backStackEntry ->

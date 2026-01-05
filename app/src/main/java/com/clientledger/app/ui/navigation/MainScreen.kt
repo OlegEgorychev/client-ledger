@@ -15,16 +15,16 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.screen.calendar.CalendarScreen
+import com.clientledger.app.ui.screen.calendar.DayScheduleScreen
 import com.clientledger.app.ui.screen.clients.ClientsScreen
 import com.clientledger.app.ui.screen.stats.StatsScreen
-import com.clientledger.app.ui.screen.today.TodayTabScreen
 import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import com.clientledger.app.ui.viewmodel.StatsViewModel
 import java.time.LocalDate
 
 sealed class MainScreenDestination(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    object Today : MainScreenDestination("today", "Сегодня", Icons.Default.Event)
+    object Today : MainScreenDestination("todayDay", "Сегодня", Icons.Default.Event)
     object Clients : MainScreenDestination("clients", "Клиенты", Icons.Default.Person)
     object Calendar : MainScreenDestination("calendar", "Календарь", Icons.Default.CalendarToday)
     object Stats : MainScreenDestination("stats", "Статистика", Icons.Default.BarChart)
@@ -34,7 +34,6 @@ sealed class MainScreenDestination(val route: String, val title: String, val ico
 @Composable
 fun MainScreen(
     repository: LedgerRepository,
-    rootNavController: NavHostController,
     onClientClick: (Long) -> Unit,
     onAddClient: () -> Unit,
     onDateClick: (LocalDate) -> Unit,
@@ -42,14 +41,19 @@ fun MainScreen(
     onAddAppointment: () -> Unit,
     onAddExpense: () -> Unit
 ) {
-    // Tab NavController - только для вкладок (today, clients, calendar, stats)
-    val tabNavController = rememberNavController()
-    val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
+    // Единый NavController для всех экранов (вкладки + день)
+    val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     
-    // Навигация на день через root navController
+    // Навигация на день через navController (внутри того же NavHost)
     val internalOnDateClick: (LocalDate) -> Unit = { date ->
-        rootNavController.navigate("day/${date.toString()}")
+        navController.navigate("day/${date.toString()}") {
+            // Просто добавляем день в стек поверх календаря
+            // Календарь остается в стеке и будет восстановлен при возврате
+            launchSingleTop = true
+            restoreState = true
+        }
     }
 
     val destinations = listOf(
@@ -66,14 +70,28 @@ fun MainScreen(
                     NavigationBarItem(
                         icon = { Icon(destination.icon, contentDescription = destination.title) },
                         label = { Text(destination.title) },
-                        selected = currentRoute == destination.route,
+                        selected = when {
+                            currentRoute == destination.route -> true
+                            destination == MainScreenDestination.Today && 
+                                (currentRoute == "todayDay" || currentRoute?.startsWith("day/") == true) -> true
+                            else -> false
+                        },
                         onClick = {
-                            tabNavController.navigate(destination.route) {
-                                popUpTo(tabNavController.graph.startDestinationId) {
-                                    saveState = true
+                            // Если уже на этой вкладке, ничего не делаем
+                            if (currentRoute != destination.route) {
+                                // Пытаемся вернуться на вкладку, если она в стеке
+                                val popped = navController.popBackStack(destination.route, inclusive = false)
+                                
+                                if (!popped) {
+                                    // Вкладки нет в стеке, навигируем на неё
+                                    navController.navigate(destination.route) {
+                                        popUpTo(navController.graph.startDestinationId) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
-                                launchSingleTop = true
-                                restoreState = true
                             }
                         }
                     )
@@ -82,20 +100,35 @@ fun MainScreen(
         }
     ) { paddingValues ->
         NavHost(
-            navController = tabNavController,
-            startDestination = MainScreenDestination.Today.route,
+            navController = navController,
+            startDestination = "todayDay",
             modifier = Modifier.padding(paddingValues)
         ) {
-            composable(MainScreenDestination.Today.route) {
-                // Экран "Сегодня" - краткий вид с кнопкой открыть день
-                TodayTabScreen(
+            // Экран "Сегодня" - расписание текущего дня
+            composable("todayDay") {
+                val today = LocalDate.now()
+                DayScheduleScreen(
+                    date = today,
                     repository = repository,
-                    onOpenDay = {
-                        val today = LocalDate.now()
-                        rootNavController.navigate("day/${today.toString()}")
-                    },
-                    onAppointmentClick = onAppointmentClick
+                    onBack = { /* Не нужен, так как BottomBar всегда виден */ },
+                    onAppointmentClick = onAppointmentClick,
+                    onDateChange = null // Переключение дней происходит внутри экрана через состояние
                 )
+            }
+            
+            // Экран дня для выбранной даты
+            composable("day/{dateIso}") { backStackEntry ->
+                val dateStr = backStackEntry.arguments?.getString("dateIso")
+                dateStr?.let { date ->
+                    val localDate = LocalDate.parse(date)
+                    DayScheduleScreen(
+                        date = localDate,
+                        repository = repository,
+                        onBack = { /* Не нужен, так как BottomBar всегда виден */ },
+                        onAppointmentClick = onAppointmentClick,
+                        onDateChange = null // Переключение дней происходит внутри экрана через состояние
+                    )
+                }
             }
             
             composable(MainScreenDestination.Clients.route) {

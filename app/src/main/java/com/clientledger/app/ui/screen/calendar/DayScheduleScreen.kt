@@ -57,19 +57,28 @@ fun DayScheduleScreen(
     onAppointmentClick: (Long) -> Unit,
     onDateChange: ((LocalDate) -> Unit)? = null
 ) {
+    // Используем date как источник истины для selectedDate
+    var selectedDate by remember { mutableStateOf(date) }
+    
+    // Синхронизируем selectedDate с date из route
+    LaunchedEffect(date) {
+        selectedDate = date
+    }
+    
+    // ViewModel инициализируем с date из route
     val viewModel: DayScheduleViewModel = viewModel(
         factory = DayScheduleViewModelFactory(date, repository)
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val isToday = date == LocalDate.now()
+    val isToday = selectedDate == LocalDate.now()
     val today = LocalDate.now()
-    val showBackButton = !isToday && onDateChange == null // Не показываем кнопку "Назад" для экрана "Сегодня"
-    val showNavigationButtons = onDateChange != null // Показываем кнопки навигации только для экрана "Сегодня"
+    // Всегда показываем кнопку "Назад" (экран открывается поверх вкладок)
+    val showBackButton = true
 
-    // Обновляем ViewModel при изменении даты
-    LaunchedEffect(date) {
-        if (viewModel.uiState.value.date != date) {
-            viewModel.updateDate(date)
+    // Обновляем ViewModel при изменении selectedDate
+    LaunchedEffect(selectedDate) {
+        if (viewModel.uiState.value.date != selectedDate) {
+            viewModel.updateDate(selectedDate)
         }
     }
 
@@ -77,16 +86,15 @@ fun DayScheduleScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    if (showNavigationButtons) {
-                        // Для экрана "Сегодня" - показываем дату с кнопками навигации
-                        if (isToday) {
+                    // Всегда показываем дату с кнопками навигации
+                    if (isToday) {
                             // Для "Сегодня" - центрируем текст, кнопки по краям
                             Box(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 // Текст "Сегодня" - абсолютно по центру
                                 Text(
-                                    text = "Сегодня, ${DateUtils.formatShortDate(date)}",
+                                    text = "Сегодня, ${DateUtils.formatShortDate(selectedDate)}",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary,
@@ -106,7 +114,7 @@ fun DayScheduleScreen(
                                         // Стрелка влево (предыдущий день)
                                         IconButton(
                                             onClick = {
-                                                onDateChange?.invoke(date.minusDays(1))
+                                                selectedDate = selectedDate.minusDays(1)
                                             }
                                         ) {
                                             Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущий день")
@@ -115,7 +123,7 @@ fun DayScheduleScreen(
                                         // Иконка "перейти к сегодня" - всегда присутствует, но невидима для сегодня
                                         IconButton(
                                             onClick = {
-                                                onDateChange?.invoke(today)
+                                                selectedDate = today
                                             },
                                             enabled = false,
                                             modifier = Modifier.alpha(0f)
@@ -131,7 +139,7 @@ fun DayScheduleScreen(
                                     // Правая стрелка (следующий день)
                                     IconButton(
                                         onClick = {
-                                            onDateChange?.invoke(date.plusDays(1))
+                                            selectedDate = selectedDate.plusDays(1)
                                         }
                                     ) {
                                         Icon(Icons.Default.ArrowForward, contentDescription = "Следующий день")
@@ -148,7 +156,7 @@ fun DayScheduleScreen(
                                 // Стрелка влево (предыдущий день)
                                 IconButton(
                                     onClick = {
-                                        onDateChange?.invoke(date.minusDays(1))
+                                        selectedDate = selectedDate.minusDays(1)
                                     }
                                 ) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущий день")
@@ -157,10 +165,10 @@ fun DayScheduleScreen(
                                 // Иконка "перейти к сегодня" - всегда присутствует, но видна только если не сегодня
                                 IconButton(
                                     onClick = {
-                                        onDateChange?.invoke(today)
+                                        selectedDate = today
                                     },
-                                    enabled = true,
-                                    modifier = Modifier.alpha(1f)
+                                    enabled = !isToday,
+                                    modifier = Modifier.alpha(if (isToday) 0f else 1f)
                                 ) {
                                     Icon(
                                         Icons.Default.Today,
@@ -174,7 +182,7 @@ fun DayScheduleScreen(
                                 
                                 // Дата
                                 Text(
-                                    text = DateUtils.formatDateWithWeekday(date),
+                                    text = DateUtils.formatDateWithWeekday(selectedDate),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Normal,
                                     color = MaterialTheme.colorScheme.onSurface,
@@ -184,23 +192,18 @@ fun DayScheduleScreen(
                                 // Стрелка вправо (следующий день)
                                 IconButton(
                                     onClick = {
-                                        onDateChange?.invoke(date.plusDays(1))
+                                        selectedDate = selectedDate.plusDays(1)
                                     }
                                 ) {
                                     Icon(Icons.Default.ArrowForward, contentDescription = "Следующий день")
                                 }
                             }
                         }
-                    } else {
-                        // Для обычного экрана дня - просто дата
-                        Text(DateUtils.formatDate(date))
-                    }
                 },
                 navigationIcon = {
-                    if (showBackButton) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
-                        }
+                    // Всегда показываем кнопку "Назад" (экран открывается поверх вкладок)
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
                     }
                 }
             )
@@ -269,8 +272,10 @@ fun DayScheduleContent(
     val totalHeight = (SLOTS_PER_DAY * SLOT_HEIGHT_DP).dp
     val scrollState = rememberScrollState()
     
-    // Автопрокрутка к ближайшей записи при открытии экрана или обновлении записей
-    LaunchedEffect(appointments.size, isToday) {
+    // Автопрокрутка к ближайшей записи при открытии экрана, обновлении записей или смене даты
+    // Добавляем viewModel.uiState.value.date в зависимости, чтобы автоскролл срабатывал при смене даты
+    val currentDate = viewModel.uiState.value.date
+    LaunchedEffect(appointments.size, isToday, currentDate) {
         delay(150) // Небольшая задержка для завершения рендеринга
         if (appointments.isNotEmpty() || isToday) {
             val scrollOffset = viewModel.getScrollOffset(isToday, slotHeightPx)

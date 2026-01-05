@@ -17,6 +17,7 @@ import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.screen.calendar.CalendarScreen
 import com.clientledger.app.ui.screen.clients.ClientsScreen
 import com.clientledger.app.ui.screen.stats.StatsScreen
+import com.clientledger.app.ui.screen.today.TodayTabScreen
 import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import com.clientledger.app.ui.viewmodel.StatsViewModel
@@ -33,6 +34,7 @@ sealed class MainScreenDestination(val route: String, val title: String, val ico
 @Composable
 fun MainScreen(
     repository: LedgerRepository,
+    rootNavController: NavHostController,
     onClientClick: (Long) -> Unit,
     onAddClient: () -> Unit,
     onDateClick: (LocalDate) -> Unit,
@@ -40,9 +42,15 @@ fun MainScreen(
     onAddAppointment: () -> Unit,
     onAddExpense: () -> Unit
 ) {
-    val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    // Tab NavController - только для вкладок (today, clients, calendar, stats)
+    val tabNavController = rememberNavController()
+    val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    
+    // Навигация на день через root navController
+    val internalOnDateClick: (LocalDate) -> Unit = { date ->
+        rootNavController.navigate("day/${date.toString()}")
+    }
 
     val destinations = listOf(
         MainScreenDestination.Today,
@@ -60,8 +68,8 @@ fun MainScreen(
                         label = { Text(destination.title) },
                         selected = currentRoute == destination.route,
                         onClick = {
-                            navController.navigate(destination.route) {
-                                popUpTo(navController.graph.startDestinationId) {
+                            tabNavController.navigate(destination.route) {
+                                popUpTo(tabNavController.graph.startDestinationId) {
                                     saveState = true
                                 }
                                 launchSingleTop = true
@@ -74,22 +82,19 @@ fun MainScreen(
         }
     ) { paddingValues ->
         NavHost(
-            navController = navController,
+            navController = tabNavController,
             startDestination = MainScreenDestination.Today.route,
             modifier = Modifier.padding(paddingValues)
         ) {
             composable(MainScreenDestination.Today.route) {
-                // Экран "Сегодня" - расписание текущего дня с возможностью переключения дней
-                var selectedDate by remember { mutableStateOf(LocalDate.now()) }
-                
-                com.clientledger.app.ui.screen.calendar.DayScheduleScreen(
-                    date = selectedDate,
+                // Экран "Сегодня" - краткий вид с кнопкой открыть день
+                TodayTabScreen(
                     repository = repository,
-                    onBack = { /* Не нужен, так как это главный экран */ },
-                    onAppointmentClick = onAppointmentClick,
-                    onDateChange = { newDate ->
-                        selectedDate = newDate
-                    }
+                    onOpenDay = {
+                        val today = LocalDate.now()
+                        rootNavController.navigate("day/${today.toString()}")
+                    },
+                    onAppointmentClick = onAppointmentClick
                 )
             }
             
@@ -105,7 +110,7 @@ fun MainScreen(
 
             composable(MainScreenDestination.Calendar.route) {
                 CalendarScreen(
-                    onDateClick = onDateClick,
+                    onDateClick = internalOnDateClick,
                     onAddAppointment = onAddAppointment,
                     onAddExpense = onAddExpense,
                     viewModel = viewModel(

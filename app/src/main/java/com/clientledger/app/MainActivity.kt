@@ -71,6 +71,7 @@ fun AppNavigation(repository: LedgerRepository) {
         composable("main") {
             MainScreen(
                 repository = repository,
+                rootNavController = navController,
                 onClientClick = { clientId ->
                     navController.navigate("client_detail/$clientId")
                 },
@@ -78,7 +79,8 @@ fun AppNavigation(repository: LedgerRepository) {
                     navController.navigate("client_edit")
                 },
                 onDateClick = { date ->
-                    navController.navigate("day_schedule/${date.toString()}")
+                    // Навигация на день через root navController
+                    navController.navigate("day/${date.toString()}")
                 },
                 onAppointmentClick = { appointmentId ->
                     navController.navigate("appointment_details/$appointmentId")
@@ -90,6 +92,22 @@ fun AppNavigation(repository: LedgerRepository) {
                     navController.navigate("expense_edit/null")
                 }
             )
+        }
+        
+        composable("day/{dateIso}") { backStackEntry ->
+            val dateStr = backStackEntry.arguments?.getString("dateIso")
+            dateStr?.let { date ->
+                val localDate = LocalDate.parse(date)
+                DayScheduleScreen(
+                    date = localDate,
+                    repository = repository,
+                    onBack = { navController.popBackStack() },
+                    onAppointmentClick = { appointmentId ->
+                        navController.navigate("appointment_details/$appointmentId")
+                    },
+                    onDateChange = null // Переключение дней происходит внутри экрана через состояние
+                )
+            }
         }
 
         composable("client_detail/{clientId}") { backStackEntry ->
@@ -119,21 +137,6 @@ fun AppNavigation(repository: LedgerRepository) {
                 repository = repository,
                 onBack = { navController.popBackStack() }
             )
-        }
-
-        composable("day_schedule/{date}") { backStackEntry ->
-            val dateStr = backStackEntry.arguments?.getString("date")
-            dateStr?.let { date ->
-                val localDate = LocalDate.parse(date)
-                DayScheduleScreen(
-                    date = localDate,
-                    repository = repository,
-                    onBack = { navController.popBackStack() },
-                    onAppointmentClick = { appointmentId ->
-                        navController.navigate("appointment_details/$appointmentId")
-                    }
-                )
-            }
         }
 
         composable("day_detail/{date}") { backStackEntry ->

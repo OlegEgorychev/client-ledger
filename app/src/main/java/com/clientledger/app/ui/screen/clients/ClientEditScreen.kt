@@ -8,6 +8,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.repository.LedgerRepository
+import com.clientledger.app.ui.components.PhoneInput
+import com.clientledger.app.ui.components.validatePhoneNumber
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -22,6 +24,7 @@ fun ClientEditScreen(
     var gender by remember { mutableStateOf("male") }
     var birthDate by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
+    var phoneError by remember { mutableStateOf<String?>(null) }
     var telegram by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -107,12 +110,27 @@ fun ClientEditScreen(
                 placeholder = { Text("2020-01-01") }
             )
 
-            OutlinedTextField(
+            // Валидация телефона
+            val (isPhoneValid, phoneValidationError) = remember(phone) {
+                validatePhoneNumber(phone)
+            }
+
+            PhoneInput(
                 value = phone,
-                onValueChange = { phone = it },
-                label = { Text("Телефон") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                onValueChange = { 
+                    phone = it
+                    phoneError = null // Сбрасываем ошибку при изменении
+                },
+                isError = !isPhoneValid && phone.isNotBlank(),
+                supportingText = if (!isPhoneValid && phone.isNotBlank()) {
+                    phoneValidationError ?: "Введите корректный номер телефона"
+                } else {
+                    phoneError
+                },
+                onPasteError = { error ->
+                    phoneError = error
+                },
+                modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
@@ -147,16 +165,24 @@ fun ClientEditScreen(
                         return@Button
                     }
 
+                    // Валидация телефона
+                    val (isPhoneValid, phoneValidationError) = validatePhoneNumber(phone)
+                    if (!isPhoneValid && phone.isNotBlank()) {
+                        phoneError = phoneValidationError ?: "Введите корректный номер телефона"
+                        return@Button
+                    }
+
                     scope.launch {
                         isLoading = true
                         error = null
+                        phoneError = null
 
                         try {
                             // Проверка уникальности телефона (только если телефон указан)
                             if (phone.isNotBlank()) {
                                 val existing = repository.getClientByPhone(phone)
                                 if (existing != null && existing.id != clientId) {
-                                    error = "Клиент с таким телефоном уже существует"
+                                    phoneError = "Клиент с таким телефоном уже существует"
                                     isLoading = false
                                     return@launch
                                 }
@@ -203,7 +229,7 @@ fun ClientEditScreen(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                enabled = !isLoading && (phone.isBlank() || validatePhoneNumber(phone).first)
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp))

@@ -4,6 +4,8 @@
 
 This application was created for my mother, who works as a stylist. She needed a tool to structure and organize her work with clients, manage appointments, track income and expenses, and maintain client information in one place.
 
+This project is being developed with the assistance of **AI Cursor** and **ChatGPT** to accelerate development and implement best practices.
+
 ## Description
 
 Client Ledger is an Android application built with Jetpack Compose and Room database, designed to help stylists and service providers manage their client relationships, appointments, and finances.

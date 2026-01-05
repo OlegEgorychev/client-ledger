@@ -51,6 +51,19 @@ object DateUtils {
         return date.format(formatter)
     }
 
+    fun formatDateWithWeekday(date: LocalDate): String {
+        val dayFormatter = DateTimeFormatter.ofPattern("d MMM", java.util.Locale("ru"))
+        val weekdayFormatter = DateTimeFormatter.ofPattern("E", java.util.Locale("ru"))
+        val day = date.format(dayFormatter)
+        val weekday = date.format(weekdayFormatter).lowercase()
+        return "$day, $weekday"
+    }
+
+    fun formatShortDate(date: LocalDate): String {
+        val dayFormatter = DateTimeFormatter.ofPattern("d MMM", java.util.Locale("ru"))
+        return date.format(dayFormatter)
+    }
+
     fun formatMonth(month: YearMonth): String {
         val formatter = DateTimeFormatter.ofPattern("MMMM yyyy", java.util.Locale("ru"))
         return month.format(formatter)

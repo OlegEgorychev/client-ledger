@@ -79,13 +79,17 @@ fun MainScreen(
             modifier = Modifier.padding(paddingValues)
         ) {
             composable(MainScreenDestination.Today.route) {
-                // Экран "Сегодня" - расписание текущего дня
-                val today = LocalDate.now()
+                // Экран "Сегодня" - расписание текущего дня с возможностью переключения дней
+                var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+                
                 com.clientledger.app.ui.screen.calendar.DayScheduleScreen(
-                    date = today,
+                    date = selectedDate,
                     repository = repository,
                     onBack = { /* Не нужен, так как это главный экран */ },
-                    onAppointmentClick = onAppointmentClick
+                    onAppointmentClick = onAppointmentClick,
+                    onDateChange = { newDate ->
+                        selectedDate = newDate
+                    }
                 )
             }
             

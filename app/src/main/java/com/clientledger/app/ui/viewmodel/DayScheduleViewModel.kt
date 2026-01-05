@@ -26,7 +26,7 @@ data class DayScheduleUiState(
 )
 
 class DayScheduleViewModel(
-    private val date: LocalDate,
+    private var date: LocalDate,
     private val repository: LedgerRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
@@ -36,6 +36,17 @@ class DayScheduleViewModel(
 
     init {
         loadAppointments()
+    }
+
+    /**
+     * Обновить дату и перезагрузить записи
+     */
+    fun updateDate(newDate: LocalDate) {
+        if (date != newDate) {
+            date = newDate
+            _uiState.value = _uiState.value.copy(date = newDate)
+            loadAppointments()
+        }
     }
 
     private fun loadAppointments() {

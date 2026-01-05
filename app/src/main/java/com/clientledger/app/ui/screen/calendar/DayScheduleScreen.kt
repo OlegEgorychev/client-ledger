@@ -1,5 +1,8 @@
 package com.clientledger.app.ui.screen.calendar
 
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -8,10 +11,13 @@ import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.delay
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -48,19 +54,148 @@ fun DayScheduleScreen(
     date: LocalDate,
     repository: LedgerRepository,
     onBack: () -> Unit,
-    onAppointmentClick: (Long) -> Unit
+    onAppointmentClick: (Long) -> Unit,
+    onDateChange: ((LocalDate) -> Unit)? = null
 ) {
     val viewModel: DayScheduleViewModel = viewModel(
         factory = DayScheduleViewModelFactory(date, repository)
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val isToday = date == LocalDate.now()
-    val showBackButton = !isToday // Не показываем кнопку "Назад" для экрана "Сегодня"
+    val today = LocalDate.now()
+    val showBackButton = !isToday && onDateChange == null // Не показываем кнопку "Назад" для экрана "Сегодня"
+    val showNavigationButtons = onDateChange != null // Показываем кнопки навигации только для экрана "Сегодня"
+
+    // Обновляем ViewModel при изменении даты
+    LaunchedEffect(date) {
+        if (viewModel.uiState.value.date != date) {
+            viewModel.updateDate(date)
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(DateUtils.formatDate(date)) },
+                title = {
+                    if (showNavigationButtons) {
+                        // Для экрана "Сегодня" - показываем дату с кнопками навигации
+                        if (isToday) {
+                            // Для "Сегодня" - центрируем текст, кнопки по краям
+                            Box(
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // Текст "Сегодня" - абсолютно по центру
+                                Text(
+                                    text = "Сегодня, ${DateUtils.formatShortDate(date)}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.align(Alignment.Center)
+                                )
+                                
+                                // Кнопки навигации по краям
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Левая группа: стрелка влево и иконка "перейти к сегодня"
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Стрелка влево (предыдущий день)
+                                        IconButton(
+                                            onClick = {
+                                                onDateChange?.invoke(date.minusDays(1))
+                                            }
+                                        ) {
+                                            Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущий день")
+                                        }
+                                        
+                                        // Иконка "перейти к сегодня" - всегда присутствует, но невидима для сегодня
+                                        IconButton(
+                                            onClick = {
+                                                onDateChange?.invoke(today)
+                                            },
+                                            enabled = false,
+                                            modifier = Modifier.alpha(0f)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Today,
+                                                contentDescription = "Вернуться к сегодня",
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                    
+                                    // Правая стрелка (следующий день)
+                                    IconButton(
+                                        onClick = {
+                                            onDateChange?.invoke(date.plusDays(1))
+                                        }
+                                    ) {
+                                        Icon(Icons.Default.ArrowForward, contentDescription = "Следующий день")
+                                    }
+                                }
+                            }
+                        } else {
+                            // Для других дней - как было (Row с элементами слева направо)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Стрелка влево (предыдущий день)
+                                IconButton(
+                                    onClick = {
+                                        onDateChange?.invoke(date.minusDays(1))
+                                    }
+                                ) {
+                                    Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущий день")
+                                }
+                                
+                                // Иконка "перейти к сегодня" - всегда присутствует, но видна только если не сегодня
+                                IconButton(
+                                    onClick = {
+                                        onDateChange?.invoke(today)
+                                    },
+                                    enabled = true,
+                                    modifier = Modifier.alpha(1f)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Today,
+                                        contentDescription = "Вернуться к сегодня",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                
+                                // Фиксированный отступ для стабильности layout
+                                Spacer(modifier = Modifier.width(8.dp))
+                                
+                                // Дата
+                                Text(
+                                    text = DateUtils.formatDateWithWeekday(date),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                
+                                // Стрелка вправо (следующий день)
+                                IconButton(
+                                    onClick = {
+                                        onDateChange?.invoke(date.plusDays(1))
+                                    }
+                                ) {
+                                    Icon(Icons.Default.ArrowForward, contentDescription = "Следующий день")
+                                }
+                            }
+                        }
+                    } else {
+                        // Для обычного экрана дня - просто дата
+                        Text(DateUtils.formatDate(date))
+                    }
+                },
                 navigationIcon = {
                     if (showBackButton) {
                         IconButton(onClick = onBack) {
@@ -194,6 +329,15 @@ fun DayScheduleContent(
                             modifier = Modifier.fillMaxSize()
                         )
 
+                        // Линия текущего времени (только для сегодня)
+                        if (isToday) {
+                            CurrentTimeIndicator(
+                                slotHeightPx = slotHeightPx,
+                                density = density,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+
                         // Записи
                         appointments.forEach { appointmentWithClient ->
                             AppointmentCardOnTimeline(
@@ -312,6 +456,57 @@ fun TimeGrid(
                 )
             }
         }
+    }
+}
+
+/**
+ * Индикатор текущего времени на таймлайне
+ */
+@Composable
+fun CurrentTimeIndicator(
+    slotHeightPx: Float,
+    density: androidx.compose.ui.unit.Density,
+    modifier: Modifier = Modifier
+) {
+    val now = remember { LocalTime.now() }
+    val nowMinutes = now.hour * 60 + now.minute
+    val normalizedMinutes = (nowMinutes / 5) * 5 // Нормализуем к 5-минутным слотам
+    val startSlot = normalizedMinutes / 5
+    val yPx = startSlot * slotHeightPx
+    
+    // Анимация мигания для видимости
+    val infiniteTransition = rememberInfiniteTransition(label = "time_indicator")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "time_indicator_alpha"
+    )
+    
+    val colorScheme = MaterialTheme.colorScheme
+    val primaryColor = colorScheme.primary
+    
+    Canvas(
+        modifier = modifier
+    ) {
+        val lineColor = primaryColor.copy(alpha = alpha)
+        
+        drawLine(
+            color = lineColor,
+            start = Offset(0f, yPx),
+            end = Offset(size.width, yPx),
+            strokeWidth = 3f
+        )
+        
+        // Кружок на линии для акцента
+        drawCircle(
+            color = lineColor,
+            radius = 6.dp.toPx(),
+            center = Offset(0f, yPx)
+        )
     }
 }
 

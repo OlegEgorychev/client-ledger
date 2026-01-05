@@ -6,6 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -13,6 +16,7 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -29,6 +33,7 @@ import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.util.*
 import com.clientledger.app.util.MoneyUtils
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
@@ -71,19 +76,20 @@ fun AppointmentEditScreen(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     
+    // Проверка дубля клиента
+    var hasClientNameConflict by remember { mutableStateOf(false) }
+    var existingClientId by remember { mutableStateOf<Long?>(null) }
+    
     // Инициализируем дату и время при первом запуске
     LaunchedEffect(date) {
         if (appointmentId == null) {
             selectedDate = date
-            // Устанавливаем текущее время для новых записей
-            val now = LocalTime.now()
-            startHour = now.hour
-            // Округляем минуты до ближайшего значения с шагом 5
-            startMinute = (now.minute / 5) * 5
-            // Время окончания - на час позже
-            val endTime = now.plusHours(1)
-            endHour = endTime.hour
-            endMinute = (endTime.minute / 5) * 5
+            // Устанавливаем время по умолчанию 12:00 для новых записей
+            startHour = 12
+            startMinute = 0
+            // Время окончания - на час позже (13:00)
+            endHour = 13
+            endMinute = 0
         }
     }
 
@@ -156,21 +162,27 @@ fun AppointmentEditScreen(
     
     val isSaveEnabled = remember(
         title, clientNameText, selectedClientId, incomeRubles, selectedDate,
-        startHour, startMinute, endHour, endMinute, isTimeRangeValid, hasTimeOverlap
+        startHour, startMinute, endHour, endMinute, isTimeRangeValid, hasTimeOverlap,
+        hasClientNameConflict, uiState.isSaving
     ) {
-        viewModel.isSaveEnabled(
-            title = title,
-            clientNameText = clientNameText,
-            selectedClientId = selectedClientId,
-            incomeRubles = incomeRubles,
-            dateSelected = selectedDate != null,
-            startHour = startHour,
-            startMinute = startMinute,
-            endHour = endHour,
-            endMinute = endMinute,
-            isTimeRangeValid = isTimeRangeValid,
-            hasTimeOverlap = hasTimeOverlap
-        )
+        // Блокируем сохранение, если идет процесс сохранения или есть конфликт имени клиента
+        if (uiState.isSaving || hasClientNameConflict) {
+            false
+        } else {
+            viewModel.isSaveEnabled(
+                title = title,
+                clientNameText = clientNameText,
+                selectedClientId = selectedClientId,
+                incomeRubles = incomeRubles,
+                dateSelected = selectedDate != null,
+                startHour = startHour,
+                startMinute = startMinute,
+                endHour = endHour,
+                endMinute = endMinute,
+                isTimeRangeValid = isTimeRangeValid,
+                hasTimeOverlap = hasTimeOverlap
+            )
+        }
     }
     
     // Поиск клиентов при вводе текста или при фокусе на поле
@@ -190,6 +202,20 @@ fun AppointmentEditScreen(
                     showClientMenu = clients.isNotEmpty()
                 }
             }
+        }
+    }
+    
+    // Проверка дубля клиента при вводе текста (если клиент не выбран из списка)
+    LaunchedEffect(clientNameText, selectedClientId) {
+        if (clientNameText.isNotBlank() && selectedClientId == null) {
+            scope.launch {
+                val (exists, clientId) = viewModel.checkClientExists(clientNameText)
+                hasClientNameConflict = exists
+                existingClientId = clientId
+            }
+        } else {
+            hasClientNameConflict = false
+            existingClientId = null
         }
     }
 
@@ -221,25 +247,36 @@ fun AppointmentEditScreen(
         }
     }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(if (appointmentId == null) "Новая запись" else "Редактировать запись") },
                 navigationIcon = {
-                    TextButton(onClick = onBack) {
+                    TextButton(
+                        onClick = onBack,
+                        enabled = !uiState.isSaving
+                    ) {
                         Text("Назад")
                     }
                 }
             )
         }
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            val scrollState = rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Блокируем все поля во время сохранения
+                val isFormDisabled = uiState.isSaving
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -247,6 +284,7 @@ fun AppointmentEditScreen(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     placeholder = { Text("Стрижка") },
+                    enabled = !isFormDisabled,
                     isError = invalidField == AppointmentFieldType.TITLE,
                     colors = if (invalidField == AppointmentFieldType.TITLE) {
                         OutlinedTextFieldDefaults.colors(
@@ -259,7 +297,7 @@ fun AppointmentEditScreen(
                 )
 
             // Выбор даты
-            Text("Дата записи *", style = MaterialTheme.typography.titleSmall)
+            Text("Дата записи *", style = MaterialTheme.typography.labelSmall)
             OutlinedTextField(
                 value = DateUtils.formatDate(selectedDate),
                 onValueChange = { }, // Только для чтения
@@ -300,7 +338,7 @@ fun AppointmentEditScreen(
             }
 
             // Выбор клиента
-            Text("Клиент *")
+            Text("Клиент *", style = MaterialTheme.typography.labelSmall)
             ExposedDropdownMenuBox(
                 expanded = showClientMenu,
                 onExpandedChange = { showClientMenu = it }
@@ -316,19 +354,33 @@ fun AppointmentEditScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .menuAnchor(),
+                    enabled = !isFormDisabled,
                     interactionSource = interactionSource,
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = showClientMenu)
                     },
                     placeholder = { Text("Введите имя или фамилию") },
-                    isError = invalidField == AppointmentFieldType.CLIENT,
-                    colors = if (invalidField == AppointmentFieldType.CLIENT) {
+                    isError = invalidField == AppointmentFieldType.CLIENT || hasClientNameConflict,
+                    colors = if (invalidField == AppointmentFieldType.CLIENT || hasClientNameConflict) {
                         OutlinedTextFieldDefaults.colors(
                             errorBorderColor = MaterialTheme.colorScheme.error,
                             errorLabelColor = MaterialTheme.colorScheme.error
                         )
                     } else {
                         OutlinedTextFieldDefaults.colors()
+                    },
+                    supportingText = {
+                        if (hasClientNameConflict) {
+                            Text(
+                                text = "Клиент с таким именем уже существует. Выберите его из списка.",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        } else if (invalidField == AppointmentFieldType.CLIENT) {
+                            Text(
+                                text = "Выберите клиента.",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 )
                 ExposedDropdownMenu(
@@ -341,15 +393,37 @@ fun AppointmentEditScreen(
                             onClick = {
                                 clientNameText = "${client.lastName} ${client.firstName}"
                                 selectedClientId = client.id
+                                hasClientNameConflict = false
+                                existingClientId = null
                                 showClientMenu = false
                             }
                         )
                     }
                 }
             }
+            
+            // Кнопка "Выбрать клиента" при обнаружении дубля
+            if (hasClientNameConflict && existingClientId != null) {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            val client = repository.getClientById(existingClientId!!)
+                            client?.let {
+                                clientNameText = "${it.lastName} ${it.firstName}"
+                                selectedClientId = it.id
+                                hasClientNameConflict = false
+                                existingClientId = null
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Выбрать клиента")
+                }
+            }
 
             // Начало сеанса
-            Text("Начало сеанса", style = MaterialTheme.typography.titleSmall)
+            Text("Начало сеанса", style = MaterialTheme.typography.labelSmall)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -452,7 +526,7 @@ fun AppointmentEditScreen(
             }
 
             // Конец сеанса
-            Text("Конец сеанса", style = MaterialTheme.typography.titleSmall)
+            Text("Конец сеанса", style = MaterialTheme.typography.labelSmall)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -564,10 +638,11 @@ fun AppointmentEditScreen(
                 )
             }
             
+            Text("Сумма (рубли) *", style = MaterialTheme.typography.labelSmall)
             OutlinedTextField(
                 value = incomeRubles,
                 onValueChange = { if (it.all { c -> c.isDigit() || c == '.' || c == ',' }) incomeRubles = it },
-                label = { Text("Сумма (рубли) *") },
+                label = { Text("Сумма") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 placeholder = { Text("1500") },
@@ -601,50 +676,33 @@ fun AppointmentEditScreen(
                     Log.d("AppointmentEdit", "title: '$title', clientNameText: '$clientNameText', incomeRubles: '$incomeRubles'")
                     
                     // Проверка валидности формы
-                    if (!isSaveEnabled) {
-                        Log.w("AppointmentEdit", "Validation failed: form is invalid")
-                        Log.w("AppointmentEdit", "Save disabled reason: $saveDisabledReason")
+                    if (!isSaveEnabled || uiState.isSaving) {
+                        Log.w("AppointmentEdit", "Validation failed: form is invalid or already saving")
+                        Log.w("AppointmentEdit", "Save disabled reason: $saveDisabledReason, isSaving: ${uiState.isSaving}")
                         return@Button
                     }
 
                     Log.d("AppointmentEdit", "All validations passed, starting save")
                     scope.launch {
                         try {
+                            // Проверяем, будет ли создан новый клиент
+                            val willCreateNewClient = selectedClientId == null && 
+                                !hasClientNameConflict && 
+                                clientNameText.isNotBlank()
+                            
+                            // Начинаем процесс сохранения
+                            viewModel.startSaving(willCreateNewClient = willCreateNewClient)
                             isLoading = true
                             
                             Log.d("AppointmentEdit", "Save button clicked - starting save process")
                             
-                            // Определяем ID клиента: если выбран из списка - используем его, иначе создаем нового
-                            var clientId = selectedClientId
-                            if (clientId == null) {
-                                Log.d("AppointmentEdit", "Creating new client")
-                                // Создаем нового клиента
-                                // Парсим имя: если два слова - первое фамилия, второе имя; иначе - все в имя
-                                val nameParts = clientNameText.trim().split("\\s+".toRegex())
-                                val firstName: String
-                                val lastName: String
-                                if (nameParts.size >= 2) {
-                                    lastName = nameParts[0]
-                                    firstName = nameParts.subList(1, nameParts.size).joinToString(" ")
-                                } else {
-                                    lastName = clientNameText.trim()
-                                    firstName = clientNameText.trim()
-                                }
-                                
-                                val now = System.currentTimeMillis()
-                                // Генерируем временный телефон на основе timestamp для уникальности
-                                val tempPhone = "+7${now % 10000000000}"
-                                val newClient = ClientEntity(
-                                    firstName = firstName,
-                                    lastName = lastName,
-                                    gender = "male", // По умолчанию
-                                    phone = tempPhone,
-                                    createdAt = now,
-                                    updatedAt = now
-                                )
-                                clientId = repository.insertClient(newClient)
-                                Log.d("AppointmentEdit", "New client created with ID: $clientId")
-                            }
+                            // Разрешаем ID клиента: находим существующего или создаем нового
+                            val (clientId, isNewClient) = viewModel.resolveClientId(
+                                clientNameText = clientNameText,
+                                selectedClientId = selectedClientId
+                            )
+                            
+                            val clientDisplayName = clientNameText.trim()
                             
                             val incomeCents = MoneyUtils.rublesToCents(incomeRubles.replace(',', '.').toDoubleOrNull() ?: 0.0)
                             val startsAt = selectedDate.atTime(LocalTime.of(startHour, startMinute)).toMillis()
@@ -661,7 +719,7 @@ fun AppointmentEditScreen(
                             
                             val appointment = if (appointmentId == null) {
                                 AppointmentEntity(
-                                    clientId = clientId!!,
+                                    clientId = clientId,
                                     title = title,
                                     startsAt = startsAt,
                                     dateKey = selectedDate.toDateKey(),
@@ -673,7 +731,7 @@ fun AppointmentEditScreen(
                             } else {
                                 AppointmentEntity(
                                     id = appointmentId,
-                                    clientId = clientId!!,
+                                    clientId = clientId,
                                     title = title,
                                     startsAt = startsAt,
                                     dateKey = selectedDate.toDateKey(),
@@ -700,24 +758,62 @@ fun AppointmentEditScreen(
                             
                             Log.d("AppointmentEdit", "Save completed, navigating back")
                             hasTriedToSave = false // Сбрасываем флаг при успешном сохранении
+                            
+                            // Показываем уведомление о создании нового клиента
+                            if (isNewClient) {
+                                snackbarHostState.showSnackbar(
+                                    message = "Создан новый клиент: $clientDisplayName",
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                            
                             onBack()
                         } catch (e: Exception) {
                             Log.e("AppointmentEdit", "Error saving appointment", e)
-                            // В будущем здесь можно показать Snackbar с ошибкой
-                            // Для отладки просто логируем
+                            snackbarHostState.showSnackbar(
+                                message = "Не удалось сохранить. Попробуйте ещё раз.",
+                                duration = SnackbarDuration.Long
+                            )
                         } finally {
                             isLoading = false
+                            viewModel.finishSaving()
                             Log.d("AppointmentEdit", "Save process finished, isLoading = false")
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading && isSaveEnabled
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                enabled = !isLoading && isSaveEnabled && !uiState.isSaving,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
             ) {
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                if (isLoading || uiState.isSaving) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text(
+                            text = "Сохранение…",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color.White // ЯВНЫЙ белый цвет для гарантии видимости
+                        )
+                    }
                 } else {
-                    Text("Сохранить")
+                    Text(
+                        text = "Сохранить",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White // ЯВНЫЙ белый цвет для гарантии видимости
+                    )
                 }
             }
             
@@ -729,6 +825,54 @@ fun AppointmentEditScreen(
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 8.dp)
                 )
+            }
+            }
+            
+            // Overlay с индикатором загрузки во время сохранения
+            if (uiState.isSaving) {
+                var showLongSaveMessage by remember { mutableStateOf(false) }
+                
+                // Таймаут для долгих операций
+                LaunchedEffect(uiState.isSaving) {
+                    if (uiState.isSaving) {
+                        kotlinx.coroutines.delay(10000) // 10 секунд
+                        if (uiState.isSaving) {
+                            showLongSaveMessage = true
+                        }
+                    } else {
+                        showLongSaveMessage = false
+                    }
+                }
+                
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .clickable(enabled = false) { },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        CircularProgressIndicator()
+                        Text(
+                            text = uiState.savingMessage,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center
+                        )
+                        if (showLongSaveMessage) {
+                            Text(
+                                text = "Сохранение занимает больше времени, чем обычно…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
             }
         }
     }

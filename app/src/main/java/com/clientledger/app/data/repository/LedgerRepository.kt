@@ -24,6 +24,9 @@ class LedgerRepository(
     
     suspend fun getClientByPhone(phone: String): ClientEntity? = clientDao.getClientByPhone(phone)
     
+    suspend fun findClientByName(firstName: String, lastName: String): ClientEntity? =
+        clientDao.findClientByName(firstName, lastName)
+    
     suspend fun insertClient(client: ClientEntity): Long = clientDao.insertClient(client)
     
     suspend fun updateClient(client: ClientEntity) = clientDao.updateClient(client)

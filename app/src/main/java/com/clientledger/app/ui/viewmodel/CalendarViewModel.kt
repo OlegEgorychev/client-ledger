@@ -35,7 +35,9 @@ data class CalendarUiState(
     val dayAppointments: List<AppointmentEntity> = emptyList(),
     val dayExpenses: List<ExpenseEntity> = emptyList(),
     val clients: List<ClientEntity> = emptyList(),
-    val workingDays: Set<String> = emptySet() // dateKey для дней с записями
+    val workingDays: Set<String> = emptySet(), // dateKey для дней с записями
+    val isSaving: Boolean = false,
+    val savingMessage: String = ""
 )
 
 class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() {
@@ -262,9 +264,13 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
         }
         
         // 2. Клиент
-        if (clientNameText.isBlank() || selectedClientId == null) {
+        // Клиент валиден, если либо выбран из списка, либо введен текст вручную
+        if (clientNameText.isBlank()) {
             return "Выберите клиента."
         }
+        
+        // 2.1. Проверка дубля клиента (если клиент не выбран из списка)
+        // Эта проверка выполняется в UI через LaunchedEffect, здесь только валидация
         
         // 3. Сумма
         val incomeValue = incomeRubles.replace(',', '.').toDoubleOrNull()
@@ -319,7 +325,8 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
         }
         
         // 2. Клиент
-        if (clientNameText.isBlank() || selectedClientId == null) {
+        // Клиент валиден, если либо выбран из списка, либо введен текст вручную
+        if (clientNameText.isBlank()) {
             return AppointmentFieldType.CLIENT
         }
         
@@ -375,6 +382,113 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
             dateSelected, startHour, startMinute, endHour, endMinute,
             isTimeRangeValid, hasTimeOverlap
         ) == null
+    }
+
+    /**
+     * Проверить, существует ли клиент с таким именем (для предотвращения дублей)
+     * @param clientNameText введенный текст (имя и фамилия)
+     * @return Pair<Boolean, Long?> где первый элемент - true если клиент существует, второй - ID клиента (если найден)
+     */
+    suspend fun checkClientExists(clientNameText: String): Pair<Boolean, Long?> {
+        // Нормализуем строку (trim, убрать двойные пробелы)
+        val normalizedText = clientNameText.trim().replace("\\s+".toRegex(), " ")
+        
+        if (normalizedText.isBlank()) {
+            return Pair(false, null)
+        }
+
+        // Разделяем на имя и фамилию
+        val nameParts = normalizedText.split(" ", limit = 2)
+        val firstName = nameParts[0]
+        val lastName = if (nameParts.size >= 2) nameParts[1] else ""
+
+        // Проверяем, существует ли клиент с таким именем и фамилией (case-insensitive)
+        val existingClient = repository.findClientByName(firstName, lastName)
+        
+        return if (existingClient != null) {
+            Pair(true, existingClient.id)
+        } else {
+            Pair(false, null)
+        }
+    }
+
+    /**
+     * Разрешить ID клиента: найти существующего или создать нового
+     * @param clientNameText введенный текст (имя и фамилия)
+     * @param selectedClientId выбранный ID клиента (если был выбран из списка)
+     * @return Pair<Long, Boolean> где первый элемент - ID клиента, второй - true если клиент был создан
+     */
+    suspend fun resolveClientId(
+        clientNameText: String,
+        selectedClientId: Long?
+    ): Pair<Long, Boolean> {
+        // Если клиент уже выбран из списка, используем его
+        if (selectedClientId != null) {
+            return Pair(selectedClientId, false)
+        }
+
+        // Нормализуем строку (trim, убрать двойные пробелы)
+        val normalizedText = clientNameText.trim().replace("\\s+".toRegex(), " ")
+        
+        if (normalizedText.isBlank()) {
+            throw IllegalArgumentException("Имя клиента не может быть пустым")
+        }
+
+        // Разделяем на имя и фамилию
+        val nameParts = normalizedText.split(" ", limit = 2)
+        val firstName = nameParts[0]
+        val lastName = if (nameParts.size >= 2) nameParts[1] else ""
+
+        // Проверяем, существует ли клиент с таким именем и фамилией (case-insensitive)
+        val existingClient = repository.findClientByName(firstName, lastName)
+        
+        if (existingClient != null) {
+            // Клиент уже существует, используем его
+            return Pair(existingClient.id, false)
+        }
+
+        // Создаем нового клиента
+        val now = System.currentTimeMillis()
+        val tempPhone = "+7${now % 10000000000}"
+        val newClient = ClientEntity(
+            firstName = firstName,
+            lastName = lastName,
+            gender = "male", // По умолчанию
+            phone = tempPhone,
+            createdAt = now,
+            updatedAt = now
+        )
+        
+        val newClientId = repository.insertClient(newClient)
+        return Pair(newClientId, true) // true означает, что клиент был создан
+    }
+
+    /**
+     * Начать процесс сохранения
+     * @param willCreateNewClient будет ли создан новый клиент
+     */
+    fun startSaving(willCreateNewClient: Boolean = false) {
+        if (_uiState.value.isSaving) {
+            return // Уже идет сохранение, игнорируем повторный вызов
+        }
+        _uiState.value = _uiState.value.copy(
+            isSaving = true,
+            savingMessage = if (willCreateNewClient) {
+                "Создаём клиента и сохраняем запись…"
+            } else {
+                "Сохраняем запись…"
+            }
+        )
+    }
+
+    /**
+     * Завершить процесс сохранения
+     */
+    fun finishSaving() {
+        _uiState.value = _uiState.value.copy(
+            isSaving = false,
+            savingMessage = ""
+        )
     }
 }
 

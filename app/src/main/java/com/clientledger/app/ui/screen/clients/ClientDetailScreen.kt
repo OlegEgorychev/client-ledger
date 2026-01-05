@@ -147,7 +147,7 @@ fun ClientInfoCard(
                 else -> "Муж" // Fallback для старых данных
             })
             client.birthDate?.let { InfoRow("Дата рождения", it) }
-            InfoRow("Телефон", client.phone)
+            InfoRow("Телефон", client.phone?.takeIf { it.isNotBlank() } ?: "Не указан")
             client.telegram?.let { InfoRow("Telegram", it) }
             client.notes?.let { InfoRow("Заметки", it) }
             

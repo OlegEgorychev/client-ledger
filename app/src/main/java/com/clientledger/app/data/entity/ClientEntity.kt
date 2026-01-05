@@ -11,7 +11,7 @@ data class ClientEntity(
     val lastName: String,
     val gender: String, // "male", "female", "other"
     val birthDate: String? = null, // ISO "YYYY-MM-DD"
-    val phone: String,
+    val phone: String? = null,
     val telegram: String? = null,
     val notes: String? = null,
     val createdAt: Long,

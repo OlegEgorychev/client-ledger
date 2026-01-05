@@ -113,8 +113,9 @@ fun ClientCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
+                val phoneText = client.phone?.takeIf { it.isNotBlank() } ?: "Телефон не указан"
                 Text(
-                    text = client.phone,
+                    text = phoneText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

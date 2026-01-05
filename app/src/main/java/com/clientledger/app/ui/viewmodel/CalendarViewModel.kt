@@ -449,12 +449,11 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
 
         // Создаем нового клиента
         val now = System.currentTimeMillis()
-        val tempPhone = "+7${now % 10000000000}"
         val newClient = ClientEntity(
             firstName = firstName,
             lastName = lastName,
             gender = "male", // По умолчанию
-            phone = tempPhone,
+            phone = null, // Телефон не заполняется при автосоздании
             createdAt = now,
             updatedAt = now
         )

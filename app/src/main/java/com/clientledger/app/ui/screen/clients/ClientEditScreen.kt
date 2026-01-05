@@ -38,7 +38,7 @@ fun ClientEditScreen(
                     lastName = it.lastName
                     gender = it.gender
                     birthDate = it.birthDate ?: ""
-                    phone = it.phone
+                    phone = it.phone ?: ""
                     telegram = it.telegram ?: ""
                     notes = it.notes ?: ""
                 }
@@ -110,7 +110,7 @@ fun ClientEditScreen(
             OutlinedTextField(
                 value = phone,
                 onValueChange = { phone = it },
-                label = { Text("Телефон *") },
+                label = { Text("Телефон") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
@@ -142,7 +142,7 @@ fun ClientEditScreen(
 
             Button(
                 onClick = {
-                    if (firstName.isBlank() || lastName.isBlank() || phone.isBlank()) {
+                    if (firstName.isBlank() || lastName.isBlank()) {
                         error = "Заполните обязательные поля"
                         return@Button
                     }
@@ -152,12 +152,14 @@ fun ClientEditScreen(
                         error = null
 
                         try {
-                            // Проверка уникальности телефона
-                            val existing = repository.getClientByPhone(phone)
-                            if (existing != null && existing.id != clientId) {
-                                error = "Клиент с таким телефоном уже существует"
-                                isLoading = false
-                                return@launch
+                            // Проверка уникальности телефона (только если телефон указан)
+                            if (phone.isNotBlank()) {
+                                val existing = repository.getClientByPhone(phone)
+                                if (existing != null && existing.id != clientId) {
+                                    error = "Клиент с таким телефоном уже существует"
+                                    isLoading = false
+                                    return@launch
+                                }
                             }
 
                             val now = System.currentTimeMillis()
@@ -167,7 +169,7 @@ fun ClientEditScreen(
                                     lastName = lastName,
                                     gender = gender,
                                     birthDate = birthDate.ifBlank { null },
-                                    phone = phone,
+                                    phone = phone.ifBlank { null },
                                     telegram = telegram.ifBlank { null },
                                     notes = notes.ifBlank { null },
                                     createdAt = now,
@@ -180,7 +182,7 @@ fun ClientEditScreen(
                                     lastName = lastName,
                                     gender = gender,
                                     birthDate = birthDate.ifBlank { null },
-                                    phone = phone,
+                                    phone = phone.ifBlank { null },
                                     telegram = telegram.ifBlank { null },
                                     notes = notes.ifBlank { null },
                                     createdAt = 0, // Будет проигнорировано при обновлении

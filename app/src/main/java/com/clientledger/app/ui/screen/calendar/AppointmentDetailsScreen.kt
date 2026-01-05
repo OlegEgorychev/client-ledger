@@ -199,10 +199,10 @@ fun AppointmentInfoCard(
                     label = "Клиент",
                     value = "${it.lastName} ${it.firstName}"
                 )
-                if (it.phone.isNotBlank() && !it.phone.startsWith("temp_") && !it.phone.startsWith("+7") && it.phone.length < 15) {
+                it.phone?.takeIf { phone -> phone.isNotBlank() }?.let { phone ->
                     InfoRow(
                         label = "Телефон",
-                        value = it.phone
+                        value = phone
                     )
                 }
                 it.telegram?.let { telegram ->

@@ -1,16 +1,22 @@
 package com.clientledger.app.ui.screen.stats
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.ui.viewmodel.StatsPeriod
 import com.clientledger.app.ui.viewmodel.StatsViewModel
+import kotlinx.coroutines.launch
 import com.clientledger.app.util.*
 import com.clientledger.app.util.MoneyUtils
 import java.time.LocalDate
@@ -22,27 +28,34 @@ fun StatsScreen(
     viewModel: StatsViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("Статистика") })
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
         }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(16.dp)
         ) {
             // Выбор периода
             Text(
                 text = "Период",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf(StatsPeriod.DAY to "День", StatsPeriod.MONTH to "Месяц", StatsPeriod.YEAR to "Год")
@@ -57,7 +70,11 @@ fun StatsScreen(
             }
 
             // Выбор даты/месяца/года
-            when (uiState.period) {
+            Column(
+                modifier = Modifier.padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                when (uiState.period) {
                 StatsPeriod.DAY -> {
                     // TODO: DatePicker для дня
                     Text("Выбранный день: ${DateUtils.formatDate(uiState.selectedDate)}")
@@ -103,19 +120,24 @@ fun StatsScreen(
                     }
                 }
             }
+            }
 
-            Divider()
+            Divider(modifier = Modifier.padding(vertical = 16.dp))
 
             if (uiState.isLoading) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator()
                 }
             } else {
                 // Статистика
-                StatsCard(
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    StatsCard(
                     title = "Доход",
                     value = MoneyUtils.formatCents(uiState.income),
                     color = MaterialTheme.colorScheme.primary
@@ -156,6 +178,93 @@ fun StatsScreen(
                         )
                     }
                 }
+                }
+            }
+
+            // Секция "О приложении" - всегда видна внизу
+            Divider(modifier = Modifier.padding(top = 16.dp, bottom = 16.dp))
+            AboutSection(
+                onVersionCopied = {
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Версия скопирована в буфер обмена")
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun AboutSection(
+    onVersionCopied: () -> Unit
+) {
+    val context = LocalContext.current
+    val packageInfo = remember {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+    
+    val versionName = packageInfo?.versionName ?: "Unknown"
+    val versionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+        packageInfo?.longVersionCode ?: 0L
+    } else {
+        @Suppress("DEPRECATION")
+        (packageInfo?.versionCode?.toLong() ?: 0L)
+    }
+    
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "О приложении",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Text(
+                text = "Тестовая версия",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        val versionText = "Version $versionName ($versionCode)"
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("Version", versionText)
+                        clipboard.setPrimaryClip(clip)
+                        onVersionCopied()
+                    }
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Версия: $versionName ($versionCode)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Нажмите, чтобы скопировать",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

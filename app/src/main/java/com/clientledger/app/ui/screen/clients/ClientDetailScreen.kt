@@ -19,6 +19,7 @@ import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import com.clientledger.app.util.DateUtils
 import com.clientledger.app.util.MoneyUtils
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -159,10 +160,7 @@ fun ClientInfoCard(
                 else -> "Муж" // Fallback для старых данных
             })
             client.birthDate?.let { 
-                val birthDateLocal = DateUtils.parseBirthDate(it)
-                birthDateLocal?.let { date ->
-                    InfoRow("Дата рождения", DateUtils.formatBirthDate(date))
-                }
+                InfoRow("Дата рождения", DateUtils.formatDateShort(it))
             }
             InfoRow("Телефон", client.phone?.takeIf { it.isNotBlank() } ?: "Не указан")
             client.telegram?.let { InfoRow("Telegram", it) }

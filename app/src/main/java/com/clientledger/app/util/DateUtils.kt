@@ -89,6 +89,17 @@ object DateUtils {
     fun getEndOfYear(year: Int): LocalDate {
         return LocalDate.of(year, 12, 31)
     }
+
+    fun formatDateShort(dateString: String): String {
+        // Конвертирует дату из формата yyyy-mm-dd в dd.mm.yyyy
+        return try {
+            val date = LocalDate.parse(dateString)
+            val formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+            date.format(formatter)
+        } catch (e: Exception) {
+            dateString // Возвращаем исходную строку, если не удалось распарсить
+        }
+    }
 }
 
 

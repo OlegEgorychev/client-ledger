@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.repository.LedgerRepository
+import com.clientledger.app.ui.components.BirthDatePicker
 import com.clientledger.app.ui.components.PhoneInput
 import com.clientledger.app.ui.components.validatePhoneNumber
 import kotlinx.coroutines.launch
@@ -101,13 +102,14 @@ fun ClientEditScreen(
                 }
             }
 
-            OutlinedTextField(
+            BirthDatePicker(
                 value = birthDate,
                 onValueChange = { birthDate = it },
-                label = { Text("Дата рождения (YYYY-MM-DD)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("2020-01-01") }
+                label = "Дата рождения",
+                isRequired = false,
+                isError = false,
+                supportingText = null,
+                modifier = Modifier.fillMaxWidth()
             )
 
             // Валидация телефона

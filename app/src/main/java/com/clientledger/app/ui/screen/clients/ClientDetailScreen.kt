@@ -178,7 +178,7 @@ fun ClientInfoCard(
                 else -> "Муж" // Fallback для старых данных
             })
             client.birthDate?.let { 
-                InfoRow("Дата рождения", DateUtils.formatDateShort(it))
+                InfoRow("Дата рождения", DateUtils.formatBirthDate(it))
             }
             PhoneInfoRow(
                 phone = client.phone,

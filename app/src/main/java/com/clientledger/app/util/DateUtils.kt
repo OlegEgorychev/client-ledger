@@ -100,6 +100,31 @@ object DateUtils {
             dateString // Возвращаем исходную строку, если не удалось распарсить
         }
     }
+
+    /**
+     * Форматирует дату рождения в формат dd MM yyyy (например, "05 01 1992")
+     * @param dateString Дата в формате yyyy-MM-dd
+     * @return Отформатированная дата в формате dd MM yyyy или исходная строка при ошибке
+     */
+    fun formatBirthDate(dateString: String): String {
+        return try {
+            val date = LocalDate.parse(dateString)
+            val formatter = DateTimeFormatter.ofPattern("dd MM yyyy")
+            date.format(formatter)
+        } catch (e: Exception) {
+            dateString // Возвращаем исходную строку, если не удалось распарсить
+        }
+    }
+
+    /**
+     * Форматирует LocalDate в формат dd MM yyyy (например, "05 01 1992")
+     * @param date LocalDate
+     * @return Отформатированная дата в формате dd MM yyyy
+     */
+    fun formatBirthDate(date: LocalDate): String {
+        val formatter = DateTimeFormatter.ofPattern("dd MM yyyy")
+        return date.format(formatter)
+    }
 }
 
 

@@ -1,22 +1,28 @@
 package com.clientledger.app.ui.screen.clients
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
+import com.clientledger.app.util.PhoneUtils
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,6 +33,9 @@ fun ClientsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var searchQuery by remember { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -36,6 +45,9 @@ fun ClientsScreen(
             FloatingActionButton(onClick = onAddClient) {
                 Icon(Icons.Default.Add, contentDescription = "Добавить клиента")
             }
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
         }
     ) { paddingValues ->
         Column(
@@ -75,7 +87,15 @@ fun ClientsScreen(
                     items(uiState.clients) { client ->
                         ClientCard(
                             client = client,
-                            onClick = { onClientClick(client.id) }
+                            onClick = { onClientClick(client.id) },
+                            onPhoneClick = { phone ->
+                                val success = PhoneUtils.openDialer(context, phone)
+                                if (!success) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Не удалось открыть приложение телефона")
+                                    }
+                                }
+                            }
                         )
                     }
                 }
@@ -88,8 +108,11 @@ fun ClientsScreen(
 @Composable
 fun ClientCard(
     client: ClientEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onPhoneClick: (String) -> Unit
 ) {
+    val isValidPhone = PhoneUtils.isValidPhoneForCall(client.phone)
+    
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth()
@@ -114,11 +137,38 @@ fun ClientCard(
                     fontWeight = FontWeight.Bold
                 )
                 val phoneText = client.phone?.takeIf { it.isNotBlank() } ?: "Телефон не указан"
-                Text(
-                    text = phoneText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    modifier = if (isValidPhone) {
+                        Modifier.clickable { onPhoneClick(client.phone!!) }
+                    } else {
+                        Modifier
+                    },
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isValidPhone) {
+                        Icon(
+                            Icons.Default.Phone,
+                            contentDescription = "Позвонить",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Text(
+                        text = phoneText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (isValidPhone) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        textDecoration = if (isValidPhone) {
+                            TextDecoration.Underline
+                        } else {
+                            TextDecoration.None
+                        }
+                    )
+                }
                 client.telegram?.let {
                     Text(
                         text = it,

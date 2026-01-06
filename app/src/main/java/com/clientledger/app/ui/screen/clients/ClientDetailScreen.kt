@@ -1,13 +1,17 @@
 package com.clientledger.app.ui.screen.clients
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -18,7 +22,9 @@ import com.clientledger.app.ui.navigation.ClientsViewModelFactory
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import com.clientledger.app.util.DateUtils
 import com.clientledger.app.util.MoneyUtils
+import com.clientledger.app.util.PhoneUtils
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
 import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,6 +43,7 @@ fun ClientDetailScreen(
     var totalIncome by remember { mutableStateOf(0L) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(clientId) {
         scope.launch {
@@ -66,6 +73,9 @@ fun ClientDetailScreen(
                     }
                 }
             )
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
         }
     ) { paddingValues ->
         client?.let { clientData ->
@@ -78,7 +88,9 @@ fun ClientDetailScreen(
                 ClientInfoCard(
                     client = clientData,
                     appointmentsCount = appointmentsCount,
-                    totalIncome = totalIncome
+                    totalIncome = totalIncome,
+                    snackbarHostState = snackbarHostState,
+                    scope = scope
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(
@@ -141,8 +153,12 @@ fun ClientDetailScreen(
 fun ClientInfoCard(
     client: ClientEntity,
     appointmentsCount: Int,
-    totalIncome: Long
+    totalIncome: Long,
+    snackbarHostState: SnackbarHostState,
+    scope: CoroutineScope
 ) {
+    val context = LocalContext.current
+
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -162,7 +178,17 @@ fun ClientInfoCard(
             client.birthDate?.let { 
                 InfoRow("Дата рождения", DateUtils.formatDateShort(it))
             }
-            InfoRow("Телефон", client.phone?.takeIf { it.isNotBlank() } ?: "Не указан")
+            PhoneInfoRow(
+                phone = client.phone,
+                onCallClick = { phone ->
+                    val success = PhoneUtils.openDialer(context, phone)
+                    if (!success) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Не удалось открыть приложение телефона")
+                        }
+                    }
+                }
+            )
             client.telegram?.let { InfoRow("Telegram", it) }
             client.notes?.let { InfoRow("Заметки", it) }
             
@@ -198,6 +224,59 @@ fun InfoRow(label: String, value: String) {
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
         )
+    }
+}
+
+@Composable
+fun PhoneInfoRow(
+    phone: String?,
+    onCallClick: (String) -> Unit
+) {
+    val isValidPhone = PhoneUtils.isValidPhoneForCall(phone)
+    
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Телефон",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = if (isValidPhone) {
+                Modifier.clickable { onCallClick(phone!!) }
+            } else {
+                Modifier
+            },
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isValidPhone) {
+                Icon(
+                    Icons.Default.Phone,
+                    contentDescription = "Позвонить",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(
+                text = phone?.takeIf { it.isNotBlank() } ?: "Не указан",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                color = if (isValidPhone) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                textDecoration = if (isValidPhone) {
+                    TextDecoration.Underline
+                } else {
+                    TextDecoration.None
+                }
+            )
+        }
     }
 }
 

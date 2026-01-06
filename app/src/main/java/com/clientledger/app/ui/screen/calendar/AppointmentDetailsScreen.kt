@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,7 +24,9 @@ import com.clientledger.app.ui.viewmodel.AppointmentDetailsViewModel
 import com.clientledger.app.util.DateUtils
 import com.clientledger.app.util.MoneyUtils
 import com.clientledger.app.util.PhoneUtils
+import com.clientledger.app.util.TelegramUtils
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,7 +115,17 @@ fun AppointmentDetailsScreen(
                                     snackbarHostState.showSnackbar("Не удалось открыть приложение телефона")
                                 }
                             }
-                        }
+                        },
+                        onTelegramClick = { username ->
+                            val success = TelegramUtils.openTelegramChat(context, username)
+                            if (!success) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Не удалось открыть Telegram")
+                                }
+                            }
+                        },
+                        snackbarHostState = snackbarHostState,
+                        scope = scope
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -189,7 +202,10 @@ fun AppointmentDetailsScreen(
 fun AppointmentInfoCard(
     appointment: com.clientledger.app.data.entity.AppointmentEntity,
     client: com.clientledger.app.data.entity.ClientEntity?,
-    onPhoneClick: (String) -> Unit
+    onPhoneClick: (String) -> Unit,
+    onTelegramClick: (String) -> Unit,
+    snackbarHostState: SnackbarHostState,
+    scope: CoroutineScope
 ) {
     val dateTime = DateUtils.dateTimeToLocalDateTime(appointment.startsAt)
     val endDateTime = dateTime.plusMinutes(appointment.durationMinutes.toLong())
@@ -232,7 +248,14 @@ fun AppointmentInfoCard(
                     }
                 }
                 it.telegram?.let { telegram ->
-                    if (telegram.isNotBlank()) {
+                    if (TelegramUtils.isValidUsername(telegram)) {
+                        TelegramInfoRow(
+                            telegram = telegram,
+                            onTelegramClick = { username ->
+                                onTelegramClick(username)
+                            }
+                        )
+                    } else if (telegram.isNotBlank()) {
                         InfoRow(
                             label = "Telegram",
                             value = telegram
@@ -326,6 +349,56 @@ fun PhoneInfoRow(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.primary,
                 textDecoration = TextDecoration.Underline
+            )
+        }
+    }
+}
+
+@Composable
+fun TelegramInfoRow(
+    telegram: String,
+    onTelegramClick: (String) -> Unit
+) {
+    val isValidTelegram = TelegramUtils.isValidUsername(telegram)
+    
+    Column(
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = "Telegram",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = if (isValidTelegram) {
+                Modifier.clickable { onTelegramClick(telegram) }
+            } else {
+                Modifier
+            },
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isValidTelegram) {
+                Icon(
+                    Icons.Default.Message,
+                    contentDescription = "Открыть чат в Telegram",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(
+                text = telegram,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (isValidTelegram) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                textDecoration = if (isValidTelegram) {
+                    TextDecoration.Underline
+                } else {
+                    TextDecoration.None
+                }
             )
         }
     }

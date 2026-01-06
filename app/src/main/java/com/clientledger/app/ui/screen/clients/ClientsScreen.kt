@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Search
@@ -22,7 +23,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import com.clientledger.app.util.PhoneUtils
+import com.clientledger.app.util.TelegramUtils
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,7 +98,9 @@ fun ClientsScreen(
                                         snackbarHostState.showSnackbar("Не удалось открыть приложение телефона")
                                     }
                                 }
-                            }
+                            },
+                            snackbarHostState = snackbarHostState,
+                            scope = scope
                         )
                     }
                 }
@@ -109,9 +114,12 @@ fun ClientsScreen(
 fun ClientCard(
     client: ClientEntity,
     onClick: () -> Unit,
-    onPhoneClick: (String) -> Unit
+    onPhoneClick: (String) -> Unit,
+    snackbarHostState: SnackbarHostState,
+    scope: CoroutineScope
 ) {
     val isValidPhone = PhoneUtils.isValidPhoneForCall(client.phone)
+    val context = LocalContext.current
     
     Card(
         onClick = onClick,
@@ -169,12 +177,47 @@ fun ClientCard(
                         }
                     )
                 }
-                client.telegram?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                client.telegram?.let { telegram ->
+                    val isValidTelegram = TelegramUtils.isValidUsername(telegram)
+                    Row(
+                        modifier = if (isValidTelegram) {
+                            Modifier.clickable {
+                                val success = TelegramUtils.openTelegramChat(context, telegram)
+                                if (!success) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Не удалось открыть Telegram")
+                                    }
+                                }
+                            }
+                        } else {
+                            Modifier
+                        },
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isValidTelegram) {
+                            Icon(
+                                Icons.Default.Message,
+                                contentDescription = "Открыть чат в Telegram",
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Text(
+                            text = telegram,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isValidTelegram) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            textDecoration = if (isValidTelegram) {
+                                TextDecoration.Underline
+                            } else {
+                                TextDecoration.None
+                            }
+                        )
+                    }
                 }
             }
         }

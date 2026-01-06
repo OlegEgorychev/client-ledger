@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +24,7 @@ import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import com.clientledger.app.util.DateUtils
 import com.clientledger.app.util.MoneyUtils
 import com.clientledger.app.util.PhoneUtils
+import com.clientledger.app.util.TelegramUtils
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import java.time.LocalDate
@@ -189,7 +191,17 @@ fun ClientInfoCard(
                     }
                 }
             )
-            client.telegram?.let { InfoRow("Telegram", it) }
+            TelegramInfoRow(
+                telegram = client.telegram,
+                onTelegramClick = { username ->
+                    val success = TelegramUtils.openTelegramChat(context, username)
+                    if (!success) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Не удалось открыть Telegram")
+                        }
+                    }
+                }
+            )
             client.notes?.let { InfoRow("Заметки", it) }
             
             // Разделитель
@@ -271,6 +283,60 @@ fun PhoneInfoRow(
                     MaterialTheme.colorScheme.onSurface
                 },
                 textDecoration = if (isValidPhone) {
+                    TextDecoration.Underline
+                } else {
+                    TextDecoration.None
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun TelegramInfoRow(
+    telegram: String?,
+    onTelegramClick: (String) -> Unit
+) {
+    val isValidTelegram = TelegramUtils.isValidUsername(telegram)
+    val displayText = telegram?.takeIf { it.isNotBlank() } ?: "Не указан"
+    
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Telegram",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = if (isValidTelegram) {
+                Modifier.clickable { onTelegramClick(telegram!!) }
+            } else {
+                Modifier
+            },
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isValidTelegram) {
+                Icon(
+                    Icons.Default.Message,
+                    contentDescription = "Открыть чат в Telegram",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(
+                text = displayText,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                color = if (isValidTelegram) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                textDecoration = if (isValidTelegram) {
                     TextDecoration.Underline
                 } else {
                     TextDecoration.None

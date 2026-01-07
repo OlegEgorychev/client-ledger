@@ -2,9 +2,11 @@ package com.clientledger.app.data.repository
 
 import com.clientledger.app.data.dao.AppointmentDao
 import com.clientledger.app.data.dao.ClientDao
+import com.clientledger.app.data.dao.ClientIncome
 import com.clientledger.app.data.dao.DayIncome
 import com.clientledger.app.data.dao.DayProfit
 import com.clientledger.app.data.dao.ExpenseDao
+import com.clientledger.app.data.dao.SummaryStats
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.entity.ExpenseEntity
@@ -97,6 +99,16 @@ class LedgerRepository(
     
     suspend fun getWorkingDaysInRange(startDate: String, endDate: String): List<String> =
         appointmentDao.getWorkingDaysInRange(startDate, endDate)
+    
+    // Phase 1: New aggregation methods
+    suspend fun getIncomeSeries(startDate: String, endDate: String): List<DayIncome> =
+        appointmentDao.getIncomeSeries(startDate, endDate)
+    
+    suspend fun getIncomeByClient(startDate: String, endDate: String): List<ClientIncome> =
+        appointmentDao.getIncomeByClient(startDate, endDate)
+    
+    suspend fun getSummaryStats(startDate: String, endDate: String): SummaryStats =
+        appointmentDao.getSummaryStats(startDate, endDate)
 }
 
 

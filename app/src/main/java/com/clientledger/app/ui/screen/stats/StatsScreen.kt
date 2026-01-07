@@ -25,7 +25,8 @@ import java.time.YearMonth
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(
-    viewModel: StatsViewModel = viewModel()
+    viewModel: StatsViewModel = viewModel(),
+    onIncomeClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -132,34 +133,66 @@ fun StatsScreen(
                     CircularProgressIndicator()
                 }
             } else {
-                // Статистика
+                // Статистика - Phase 1: Clickable cards
                 Column(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.weight(1f)
                 ) {
+                    // Total Income - clickable
+                    ClickableStatsCard(
+                        title = "Доход",
+                        value = MoneyUtils.formatCents(uiState.income),
+                        subtitle = "Средний чек: ${MoneyUtils.formatCents(uiState.averageCheck)}",
+                        color = MaterialTheme.colorScheme.primary,
+                        onClick = {
+                            onIncomeClick(
+                                uiState.period,
+                                uiState.selectedDate,
+                                uiState.selectedYearMonth,
+                                uiState.selectedYear
+                            )
+                        }
+                    )
+
+                    // Visits count - clickable (for future)
+                    ClickableStatsCard(
+                        title = "Визиты",
+                        value = uiState.totalVisits.toString(),
+                        subtitle = if (uiState.workingDays > 0) "Среднее в день: ${String.format("%.1f", uiState.totalVisits.toFloat() / uiState.workingDays)}" else "",
+                        color = MaterialTheme.colorScheme.secondary,
+                        onClick = {
+                            // Future: Navigate to Visits Analytics
+                        }
+                    )
+
+                    // Clients count - clickable (for future)
+                    ClickableStatsCard(
+                        title = "Клиенты",
+                        value = uiState.totalClients.toString(),
+                        subtitle = "",
+                        color = MaterialTheme.colorScheme.tertiary,
+                        onClick = {
+                            // Future: Navigate to Clients Analytics
+                        }
+                    )
+
                     StatsCard(
-                    title = "Доход",
-                    value = MoneyUtils.formatCents(uiState.income),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                        title = "Расход",
+                        value = MoneyUtils.formatCents(uiState.expenses),
+                        color = MaterialTheme.colorScheme.error
+                    )
 
-                StatsCard(
-                    title = "Расход",
-                    value = MoneyUtils.formatCents(uiState.expenses),
-                    color = MaterialTheme.colorScheme.error
-                )
+                    StatsCard(
+                        title = "Прибыль",
+                        value = MoneyUtils.formatCents(uiState.profit),
+                        color = if (uiState.profit >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    )
 
-                StatsCard(
-                    title = "Прибыль",
-                    value = MoneyUtils.formatCents(uiState.profit),
-                    color = if (uiState.profit >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
-                )
-
-                StatsCard(
-                    title = "Рабочие дни",
-                    value = uiState.workingDays.toString(),
-                    color = MaterialTheme.colorScheme.secondary
-                )
+                    StatsCard(
+                        title = "Рабочие дни",
+                        value = uiState.workingDays.toString(),
+                        color = MaterialTheme.colorScheme.secondary
+                    )
 
                 if (uiState.period != StatsPeriod.DAY) {
                     uiState.mostProfitableDayByIncome?.let { day ->
@@ -296,6 +329,50 @@ fun StatsCard(
                 fontWeight = FontWeight.Bold,
                 color = color
             )
+        }
+    }
+}
+
+@Composable
+fun ClickableStatsCard(
+    title: String,
+    value: String,
+    subtitle: String,
+    color: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+            if (subtitle.isNotBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

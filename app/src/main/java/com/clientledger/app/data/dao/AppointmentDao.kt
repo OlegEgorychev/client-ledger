@@ -89,6 +89,48 @@ interface AppointmentDao {
     )
     suspend fun getWorkingDaysInRange(startDate: String, endDate: String): List<String>
 
+    // Income series for line chart (income over time)
+    @Query(
+        """
+        SELECT dateKey, COALESCE(SUM(incomeCents), 0) as totalIncome
+        FROM appointments 
+        WHERE dateKey >= :startDate AND dateKey <= :endDate AND isPaid = 1
+        GROUP BY dateKey
+        ORDER BY dateKey ASC
+        """
+    )
+    suspend fun getIncomeSeries(startDate: String, endDate: String): List<DayIncome>
+
+    // Income by client for donut chart
+    @Query(
+        """
+        SELECT 
+            c.id as clientId,
+            c.firstName || ' ' || c.lastName as clientName,
+            COALESCE(SUM(a.incomeCents), 0) as totalIncome,
+            COUNT(a.id) as visitCount
+        FROM appointments a
+        INNER JOIN clients c ON a.clientId = c.id
+        WHERE a.dateKey >= :startDate AND a.dateKey <= :endDate AND a.isPaid = 1
+        GROUP BY c.id, c.firstName, c.lastName
+        ORDER BY totalIncome DESC
+        """
+    )
+    suspend fun getIncomeByClient(startDate: String, endDate: String): List<ClientIncome>
+
+    // Summary statistics
+    @Query(
+        """
+        SELECT 
+            COALESCE(SUM(incomeCents), 0) as totalIncome,
+            COUNT(*) as totalVisits,
+            COUNT(DISTINCT clientId) as totalClients
+        FROM appointments 
+        WHERE dateKey >= :startDate AND dateKey <= :endDate AND isPaid = 1
+        """
+    )
+    suspend fun getSummaryStats(startDate: String, endDate: String): SummaryStats
+
     @Insert
     suspend fun insertAppointment(appointment: AppointmentEntity): Long
 
@@ -107,6 +149,19 @@ data class DayIncome(
 data class DayProfit(
     val dateKey: String,
     val profit: Long
+)
+
+data class ClientIncome(
+    val clientId: Long,
+    val clientName: String,
+    val totalIncome: Long,
+    val visitCount: Int
+)
+
+data class SummaryStats(
+    val totalIncome: Long,
+    val totalVisits: Int,
+    val totalClients: Int
 )
 
 

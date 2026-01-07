@@ -17,6 +17,7 @@ import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.screen.calendar.CalendarScreen
 import com.clientledger.app.ui.screen.calendar.DayScheduleScreen
 import com.clientledger.app.ui.screen.clients.ClientsScreen
+import com.clientledger.app.ui.screen.stats.IncomeDetailScreen
 import com.clientledger.app.ui.screen.stats.StatsScreen
 import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
@@ -156,7 +157,45 @@ fun MainScreen(
                 StatsScreen(
                     viewModel = viewModel(
                         factory = StatsViewModelFactory(repository)
-                    )
+                    ),
+                    onIncomeClick = { period, date, yearMonth, year ->
+                        navController.navigate("income_detail/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
+                    }
+                )
+            }
+            
+            // Income Detail Screen
+            composable("income_detail/{period}/{date}/{yearMonth}/{year}") { backStackEntry ->
+                val periodStr = backStackEntry.arguments?.getString("period")
+                val dateStr = backStackEntry.arguments?.getString("date")
+                val yearMonthStr = backStackEntry.arguments?.getString("yearMonth")
+                val yearStr = backStackEntry.arguments?.getString("year")
+                
+                val period = when (periodStr) {
+                    "DAY" -> com.clientledger.app.ui.viewmodel.StatsPeriod.DAY
+                    "MONTH" -> com.clientledger.app.ui.viewmodel.StatsPeriod.MONTH
+                    "YEAR" -> com.clientledger.app.ui.viewmodel.StatsPeriod.YEAR
+                    else -> com.clientledger.app.ui.viewmodel.StatsPeriod.MONTH
+                }
+                
+                val date = dateStr?.let { LocalDate.parse(it) } ?: LocalDate.now()
+                val yearMonth = yearMonthStr?.let {
+                    val parts = it.split("-")
+                    if (parts.size == 2) {
+                        java.time.YearMonth.of(parts[0].toInt(), parts[1].toInt())
+                    } else {
+                        java.time.YearMonth.now()
+                    }
+                } ?: java.time.YearMonth.now()
+                val year = yearStr?.toIntOrNull() ?: LocalDate.now().year
+                
+                IncomeDetailScreen(
+                    period = period,
+                    selectedDate = date,
+                    selectedYearMonth = yearMonth,
+                    selectedYear = year,
+                    repository = repository,
+                    onBack = { navController.popBackStack() }
                 )
             }
         }

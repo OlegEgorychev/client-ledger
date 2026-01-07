@@ -2,8 +2,10 @@ package com.clientledger.app.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.clientledger.app.data.dao.ClientIncome
 import com.clientledger.app.data.dao.DayIncome
 import com.clientledger.app.data.dao.DayProfit
+import com.clientledger.app.data.dao.SummaryStats
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.util.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +30,21 @@ data class StatsUiState(
     val workingDays: Int = 0,
     val mostProfitableDayByIncome: DayIncome? = null,
     val mostProfitableDayByProfit: DayProfit? = null,
+    // Phase 1: New fields
+    val totalVisits: Int = 0,
+    val totalClients: Int = 0,
+    val averageCheck: Long = 0,
+    val isLoading: Boolean = false
+)
+
+data class IncomeDetailState(
+    val period: StatsPeriod,
+    val selectedDate: LocalDate,
+    val selectedYearMonth: YearMonth,
+    val selectedYear: Int,
+    val totalIncome: Long,
+    val incomeSeries: List<DayIncome>,
+    val incomeByClient: List<ClientIncome>,
     val isLoading: Boolean = false
 )
 
@@ -84,13 +101,21 @@ class StatsViewModel(private val repository: LedgerRepository) : ViewModel() {
                 }
             }
 
-            val income = repository.getIncomeForDateRange(startDate, endDate)
+            val summary = repository.getSummaryStats(startDate, endDate)
+            val income = summary.totalIncome
             val expenses = repository.getExpensesForDateRange(startDate, endDate)
             val profit = income - expenses
             val workingDays = repository.getWorkingDaysCount(startDate, endDate)
             
             val mostProfitableByIncome = repository.getMostProfitableDayByIncome(startDate, endDate)
             val mostProfitableByProfit = repository.getMostProfitableDayByProfit(startDate, endDate)
+            
+            // Calculate average check
+            val averageCheck = if (summary.totalVisits > 0) {
+                income / summary.totalVisits
+            } else {
+                0L
+            }
 
             _uiState.value = _uiState.value.copy(
                 income = income,
@@ -99,6 +124,9 @@ class StatsViewModel(private val repository: LedgerRepository) : ViewModel() {
                 workingDays = workingDays,
                 mostProfitableDayByIncome = mostProfitableByIncome,
                 mostProfitableDayByProfit = mostProfitableByProfit,
+                totalVisits = summary.totalVisits,
+                totalClients = summary.totalClients,
+                averageCheck = averageCheck,
                 isLoading = false
             )
         }

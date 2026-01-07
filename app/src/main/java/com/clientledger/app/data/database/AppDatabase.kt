@@ -13,7 +13,7 @@ import com.clientledger.app.data.entity.ExpenseEntity
 
 @Database(
     entities = [ClientEntity::class, AppointmentEntity::class, ExpenseEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

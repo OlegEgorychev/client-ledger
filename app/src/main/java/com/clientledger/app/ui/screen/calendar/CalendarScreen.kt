@@ -3,6 +3,7 @@ package com.clientledger.app.ui.screen.calendar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +22,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.ExpenseEntity
 import com.clientledger.app.data.repository.LedgerRepository
@@ -115,7 +118,7 @@ fun CalendarScreen(
             
             // Version info at the bottom
             Spacer(modifier = Modifier.height(8.dp))
-            VersionInfo()
+            VersionInfo(repository = repository, viewModel = viewModel)
         }
     }
 }
@@ -613,8 +616,15 @@ fun StatisticsWidget(
 }
 
 @Composable
-fun VersionInfo() {
+fun VersionInfo(
+    repository: com.clientledger.app.data.repository.LedgerRepository? = null,
+    viewModel: CalendarViewModel? = null
+) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var showTestDataDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    
     val versionName = remember {
         try {
             val packageInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
@@ -629,13 +639,107 @@ fun VersionInfo() {
         }
     }
     
-    Text(
-        text = "версия $versionName",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+    // Check if debug build (simple check - in production this would use BuildConfig.DEBUG)
+    val isDebug = try {
+        val applicationInfo = context.packageManager.getApplicationInfo(context.packageName, 0)
+        (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    } catch (e: Exception) {
+        false
+    }
+    
+    Box {
+        Text(
+            text = "версия $versionName",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .then(
+                    if (isDebug && repository != null) {
+                        Modifier.clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() }
+                        ) {
+                            showTestDataDialog = true
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
+        )
+    }
+    
+    // Test data dialog (DEBUG ONLY)
+    if (showTestDataDialog && isDebug && repository != null) {
+        AlertDialog(
+            onDismissRequest = { showTestDataDialog = false },
+            title = { Text("Test Data (DEBUG)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Generate test data for statistics validation:")
+                    Text("• 30 clients (Client 1-30)")
+                    Text("• December 1-31, 2025 (full month)")
+                    Text("• January 1-7, 2026")
+                    Text("")
+                    Text("Warning: This will add test data to the database.")
+                }
+            },
+            confirmButton = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    val result = repository.generateTestData()
+                                    // Refresh calendar to show new data
+                                    viewModel?.refreshWorkingDays()
+                                    snackbarHostState.showSnackbar(
+                                        "Generated: ${result.clientsCount} clients, ${result.appointmentsCount} appointments. Switch to Dec 2025 or Jan 2026 to see them."
+                                    )
+                                } catch (e: Exception) {
+                                    snackbarHostState.showSnackbar("Error: ${e.message}")
+                                }
+                                showTestDataDialog = false
+                            }
+                        }
+                    ) {
+                        Text("Generate")
+                    }
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    repository.clearAllTestData()
+                                    snackbarHostState.showSnackbar("Test data cleared")
+                                } catch (e: Exception) {
+                                    snackbarHostState.showSnackbar("Error: ${e.message}")
+                                }
+                                showTestDataDialog = false
+                            }
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Clear All")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTestDataDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Snackbar for messages
+    SnackbarHost(
+        hostState = snackbarHostState,
+        modifier = Modifier.padding(16.dp)
     )
 }
 

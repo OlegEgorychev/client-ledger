@@ -36,6 +36,7 @@ data class AppointmentEntity(
     val status: String = AppointmentStatus.COMPLETED.name, // SCHEDULED, COMPLETED, CANCELED
     val canceledAt: Long? = null, // timestamp when canceled
     val cancelReason: String? = null, // optional reason for cancellation
+    val isTestData: Boolean = false, // Flag to identify test data
     val createdAt: Long
 )
 

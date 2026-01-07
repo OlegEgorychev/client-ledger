@@ -10,6 +10,7 @@ import com.clientledger.app.data.dao.SummaryStats
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.entity.ExpenseEntity
+import com.clientledger.app.data.testdata.TestDataGenerator
 import kotlinx.coroutines.flow.Flow
 
 class LedgerRepository(
@@ -143,6 +144,48 @@ class LedgerRepository(
     
     suspend fun getMostFrequentClient(startDate: String, endDate: String): com.clientledger.app.data.dao.MostFrequentClient? =
         appointmentDao.getMostFrequentClient(startDate, endDate)
+    
+    // Test data management (DEBUG ONLY)
+    suspend fun generateTestData(): TestDataGenerationResult {
+        val testData = TestDataGenerator.generateAllTestData()
+        
+        // Insert clients and get their IDs
+        val clientIdMap = mutableMapOf<Int, Long>()
+        testData.clients.forEachIndexed { index, client ->
+            val insertedId = clientDao.insertClient(client)
+            clientIdMap[index + 1] = insertedId // Map client index (1-30) to actual ID
+        }
+        
+        // Update appointment clientIds with actual inserted IDs
+        val allAppointments = testData.decemberAppointments + testData.januaryAppointments
+        var insertedCount = 0
+        allAppointments.forEach { appointment ->
+            // appointment.clientId is currently 1-30 (placeholder)
+            // Map to actual inserted client ID
+            val clientIndex = appointment.clientId.toInt()
+            val actualClientId = clientIdMap[clientIndex] ?: appointment.clientId
+            
+            appointmentDao.insertAppointment(
+                appointment.copy(clientId = actualClientId)
+            )
+            insertedCount++
+        }
+        
+        return TestDataGenerationResult(
+            clientsCount = testData.clients.size,
+            appointmentsCount = insertedCount
+        )
+    }
+    
+    data class TestDataGenerationResult(
+        val clientsCount: Int,
+        val appointmentsCount: Int
+    )
+    
+    suspend fun clearAllTestData() {
+        appointmentDao.deleteAllTestAppointments()
+        clientDao.deleteAllTestClients()
+    }
 }
 
 

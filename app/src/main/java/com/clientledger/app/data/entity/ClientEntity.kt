@@ -14,6 +14,7 @@ data class ClientEntity(
     val phone: String? = null,
     val telegram: String? = null,
     val notes: String? = null,
+    val isTestData: Boolean = false, // Flag to identify test data
     val createdAt: Long,
     val updatedAt: Long
 )

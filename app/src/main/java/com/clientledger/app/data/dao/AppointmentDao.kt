@@ -268,6 +268,10 @@ interface AppointmentDao {
 
     @Delete
     suspend fun deleteAppointment(appointment: AppointmentEntity)
+    
+    // Test data management
+    @Query("DELETE FROM appointments WHERE isTestData = 1")
+    suspend fun deleteAllTestAppointments()
 }
 
 data class DayIncome(

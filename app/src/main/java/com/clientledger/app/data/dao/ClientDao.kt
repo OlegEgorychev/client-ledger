@@ -43,6 +43,10 @@ interface ClientDao {
 
     @Delete
     suspend fun deleteClient(client: ClientEntity)
+    
+    // Test data management
+    @Query("DELETE FROM clients WHERE isTestData = 1")
+    suspend fun deleteAllTestClients()
 }
 
 

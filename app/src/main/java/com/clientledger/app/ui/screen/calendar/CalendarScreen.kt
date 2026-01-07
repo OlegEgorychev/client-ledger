@@ -1,9 +1,12 @@
 package com.clientledger.app.ui.screen.calendar
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -56,12 +59,15 @@ fun CalendarScreen(
             }
         }
     ) { paddingValues ->
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 // Reserve space for FAB so bottom widgets don't overlap with the "+" button
                 .padding(bottom = 88.dp)
+                // Make the whole screen scrollable for small heights / large fontScale
+                .verticalScroll(scrollState)
         ) {
             // Навигация по месяцам
             MonthHeader(
@@ -74,6 +80,7 @@ fun CalendarScreen(
             CalendarGrid(
                 month = uiState.currentMonth,
                 workingDays = uiState.workingDays,
+                selectedDate = uiState.selectedDate,
                 onDateClick = { date ->
                     viewModel.selectDate(date)
                     onDateClick(date)
@@ -81,7 +88,7 @@ fun CalendarScreen(
             )
             
             // Statistics widgets at the bottom
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(16.dp))
             if (repository != null && onIncomeDetailClick != null) {
                 StatisticsWidgets(
                     repository = repository,
@@ -107,6 +114,7 @@ fun CalendarScreen(
             }
             
             // Version info at the bottom
+            Spacer(modifier = Modifier.height(8.dp))
             VersionInfo()
         }
     }
@@ -126,7 +134,11 @@ fun MonthHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onPreviousMonth) {
-            Icon(Icons.Default.ArrowBack, contentDescription = "Предыдущий месяц")
+            Icon(
+                Icons.Default.ArrowBack,
+                contentDescription = "Предыдущий месяц",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         Text(
             text = DateUtils.formatMonth(month),
@@ -134,7 +146,11 @@ fun MonthHeader(
             fontWeight = FontWeight.Bold
         )
         IconButton(onClick = onNextMonth) {
-            Icon(Icons.Default.ArrowForward, contentDescription = "Следующий месяц")
+            Icon(
+                Icons.Default.ArrowForward,
+                contentDescription = "Следующий месяц",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -143,6 +159,7 @@ fun MonthHeader(
 fun CalendarGrid(
     month: YearMonth,
     workingDays: Set<String>,
+    selectedDate: LocalDate?,
     onDateClick: (LocalDate) -> Unit
 ) {
     val firstDayOfMonth = month.atDay(1)
@@ -164,8 +181,8 @@ fun CalendarGrid(
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -183,6 +200,7 @@ fun CalendarGrid(
                     } else if (currentDay <= daysInMonth) {
                         val date = month.atDay(currentDay)
                         val isToday = date == LocalDate.now()
+                        val isSelected = selectedDate == date
                         val dateKey = date.toDateKey()
                         val hasAppointments = workingDays.contains(dateKey)
                         // dayOfWeek: 0 = понедельник, 5 = суббота, 6 = воскресенье
@@ -191,6 +209,7 @@ fun CalendarGrid(
                         CalendarDayCell(
                             day = currentDay,
                             isToday = isToday,
+                            isSelected = isSelected,
                             hasAppointments = hasAppointments,
                             isWeekend = isWeekend,
                             onClick = { onDateClick(date) },
@@ -211,6 +230,7 @@ fun CalendarGrid(
 fun CalendarDayCell(
     day: Int,
     isToday: Boolean,
+    isSelected: Boolean,
     hasAppointments: Boolean,
     isWeekend: Boolean,
     onClick: () -> Unit,
@@ -223,28 +243,27 @@ fun CalendarDayCell(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        // Фон для выходных дней (легкая заливка)
-        if (isWeekend && !isToday) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(8.dp)
-                    )
-            )
-        }
-        
-        // Фон для текущего дня (круг)
-        if (isToday) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize(0.7f)
-                    .background(
+        // Single clear selection marker: filled circle for selected date.
+        // If not selected, optionally outline "today" (subtle, secondary).
+        val circleModifier = Modifier.fillMaxSize(0.7f)
+        when {
+            isSelected -> {
+                Box(
+                    modifier = circleModifier.background(
                         color = MaterialTheme.colorScheme.primary,
                         shape = RoundedCornerShape(50)
                     )
-            )
+                )
+            }
+            isToday -> {
+                Box(
+                    modifier = circleModifier.border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(50)
+                    )
+                )
+            }
         }
         
         // Текст с числом дня
@@ -256,24 +275,27 @@ fun CalendarDayCell(
             Text(
                 text = day.toString(),
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                color = if (isToday) 
-                    MaterialTheme.colorScheme.onPrimary 
-                else 
-                    MaterialTheme.colorScheme.onSurface
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                color = when {
+                    isSelected -> MaterialTheme.colorScheme.onPrimary
+                    isWeekend -> MaterialTheme.colorScheme.onSurfaceVariant
+                    else -> MaterialTheme.colorScheme.onSurface
+                }
             )
             
-            // Индикатор рабочих дней (точка)
+            // Dot indicator only for "has appointments/events".
+            // If selected day has no appointments, do not show the dot.
             if (hasAppointments) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Box(
                     modifier = Modifier
                         .size(4.dp)
                         .background(
-                            color = if (isToday) 
-                                MaterialTheme.colorScheme.onPrimary 
-                            else 
-                                MaterialTheme.colorScheme.primary,
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                            },
                             shape = RoundedCornerShape(50)
                         )
                 )
@@ -532,7 +554,7 @@ fun StatisticsWidgets(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Today widget
@@ -570,9 +592,9 @@ fun StatisticsWidget(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
                 text = title,
@@ -583,7 +605,8 @@ fun StatisticsWidget(
                 text = value,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                // Keep income readable but not competing with accent (selected day + FAB).
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }
@@ -607,12 +630,12 @@ fun VersionInfo() {
     }
     
     Text(
-        text = "Version: $versionName",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        text = "версия $versionName",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     )
 }
 

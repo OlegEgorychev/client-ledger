@@ -122,8 +122,37 @@ class LedgerRepository(
         appointmentDao.getCancellationsSeries(startDate, endDate)
     
     // Clients Analytics
-    suspend fun getClientsSummary(startDate: String, endDate: String): com.clientledger.app.data.dao.ClientsSummary =
-        appointmentDao.getClientsSummary(startDate, endDate)
+    suspend fun getClientsSummary(startDate: String, endDate: String): com.clientledger.app.data.dao.ClientsSummary {
+        val summary = appointmentDao.getClientsSummary(startDate, endDate)
+        val firstDates = appointmentDao.getFirstAppointmentDates()
+        val firstDateMap = firstDates.associateBy { it.clientId }
+        
+        // Get all clients in period
+        val clientsInPeriod = appointmentDao.getClientIdsInPeriod(startDate, endDate)
+        
+        var newClients = 0
+        var returningClients = 0
+        
+        clientsInPeriod.forEach { clientId ->
+            val firstDate = firstDateMap[clientId]?.firstDateKey
+            // New client: first appointment is in the selected period
+            // Returning client: first appointment was before the selected period
+            if (firstDate == null || (firstDate >= startDate && firstDate <= endDate)) {
+                newClients++
+            } else if (firstDate < startDate) {
+                returningClients++
+            } else {
+                // Edge case: firstDate > endDate (shouldn't happen if client is in period)
+                newClients++
+            }
+        }
+        
+        return summary.copy(
+            newClients = newClients,
+            returningClients = returningClients
+        )
+    }
+    
     
     suspend fun getTopClientsByIncome(startDate: String, endDate: String, limit: Int = 10): List<com.clientledger.app.data.dao.TopClient> =
         appointmentDao.getTopClientsByIncome(startDate, endDate, limit)

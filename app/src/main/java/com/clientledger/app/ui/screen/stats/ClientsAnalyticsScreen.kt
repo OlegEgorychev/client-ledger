@@ -1,5 +1,7 @@
 package com.clientledger.app.ui.screen.stats
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -9,6 +11,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.clientledger.app.ui.components.DonutChart
+import com.clientledger.app.ui.components.DonutSegment
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.dao.TopClient
@@ -108,6 +112,126 @@ fun ClientsAnalyticsScreen(
                                 value = MoneyUtils.formatCents(uiState.avgIncomePerClient),
                                 modifier = Modifier.weight(1f)
                             )
+                        }
+                    }
+                }
+                
+                // New vs Returning clients donut chart
+                if (uiState.uniqueClients > 0) {
+                    var selectedSegmentIndex by remember { mutableStateOf(-1) }
+                    val totalClients = uiState.uniqueClients.toLong()
+                    val newClients = uiState.newClients.toLong()
+                    val returningClients = uiState.returningClients.toLong()
+                    
+                    val segments = listOf(
+                        DonutSegment(
+                            label = "Новые",
+                            value = newClients,
+                            color = MaterialTheme.colorScheme.tertiary
+                        ),
+                        DonutSegment(
+                            label = "Возвращающиеся",
+                            value = returningClients,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text(
+                                text = "Новые vs Возвращающиеся",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            
+                            DonutChart(
+                                segments = segments,
+                                centerText = totalClients.toString(),
+                                selectedIndex = selectedSegmentIndex,
+                                onSegmentClick = { index ->
+                                    selectedSegmentIndex = if (selectedSegmentIndex == index) -1 else index
+                                },
+                                modifier = Modifier.size(200.dp)
+                            )
+                            
+                            // List with percentages
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                segments.forEachIndexed { index, segment ->
+                                    val percentage = if (totalClients > 0) {
+                                        (segment.value.toFloat() / totalClients * 100)
+                                    } else {
+                                        0f
+                                    }
+                                    
+                                    val isSelected = selectedSegmentIndex == index
+                                    
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                selectedSegmentIndex = if (isSelected) -1 else index
+                                            }
+                                            .padding(vertical = 8.dp, horizontal = 12.dp)
+                                            .then(
+                                                if (isSelected) {
+                                                    Modifier.background(
+                                                        color = segment.color.copy(alpha = 0.1f),
+                                                        shape = MaterialTheme.shapes.small
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                }
+                                            ),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(16.dp)
+                                                    .background(
+                                                        color = segment.color,
+                                                        shape = MaterialTheme.shapes.small
+                                                    )
+                                            )
+                                            Text(
+                                                text = segment.label,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "${segment.value}",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Text(
+                                                text = "${String.format("%.1f", percentage)}%",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

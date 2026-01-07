@@ -172,6 +172,27 @@ interface AppointmentDao {
     )
     suspend fun getClientsSummary(startDate: String, endDate: String): ClientsSummary
     
+    // Get first appointment date for each client
+    @Query(
+        """
+        SELECT clientId, MIN(dateKey) as firstDateKey
+        FROM appointments
+        WHERE status != 'CANCELED'
+        GROUP BY clientId
+        """
+    )
+    suspend fun getFirstAppointmentDates(): List<ClientFirstDate>
+    
+    // Get distinct client IDs in period
+    @Query(
+        """
+        SELECT DISTINCT clientId
+        FROM appointments
+        WHERE dateKey >= :startDate AND dateKey <= :endDate AND status != 'CANCELED'
+        """
+    )
+    suspend fun getClientIdsInPeriod(startDate: String, endDate: String): List<Long>
+    
     @Query(
         """
         SELECT 
@@ -347,6 +368,11 @@ data class MostFrequentClient(
     val clientId: Long,
     val clientName: String,
     val visitCount: Int
+)
+
+data class ClientFirstDate(
+    val clientId: Long,
+    val firstDateKey: String
 )
 
 

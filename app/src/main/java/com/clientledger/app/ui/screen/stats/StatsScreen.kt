@@ -21,7 +21,10 @@ import java.time.YearMonth
 @Composable
 fun StatsScreen(
     viewModel: StatsViewModel = viewModel(),
-    onIncomeClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> }
+    onIncomeClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> },
+    onClientsClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> },
+    onVisitsClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> },
+    onReportsClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -164,26 +167,36 @@ fun StatsScreen(
                         comparison = uiState.incomeComparison
                     )
 
-                    // Visits count - clickable (for future)
+                    // Visits count - clickable
                     ClickableStatsCard(
                         title = "Визиты",
                         value = uiState.totalVisits.toString(),
                         subtitle = if (uiState.workingDays > 0) "Среднее в день: ${String.format("%.1f", uiState.totalVisits.toFloat() / uiState.workingDays)}" else "",
                         color = MaterialTheme.colorScheme.secondary,
                         onClick = {
-                            // Future: Navigate to Visits Analytics
+                            onVisitsClick(
+                                uiState.period,
+                                uiState.selectedDate,
+                                uiState.selectedYearMonth,
+                                uiState.selectedYear
+                            )
                         },
                         comparison = uiState.visitsComparison
                     )
 
-                    // Clients count - clickable (for future)
+                    // Clients count - clickable
                     ClickableStatsCard(
                         title = "Клиенты",
                         value = uiState.totalClients.toString(),
                         subtitle = "",
                         color = MaterialTheme.colorScheme.tertiary,
                         onClick = {
-                            // Future: Navigate to Clients Analytics
+                            onClientsClick(
+                                uiState.period,
+                                uiState.selectedDate,
+                                uiState.selectedYearMonth,
+                                uiState.selectedYear
+                            )
                         },
                         comparison = uiState.clientsComparison
                     )
@@ -213,6 +226,21 @@ fun StatsScreen(
                         value = uiState.workingDays.toString(),
                         color = MaterialTheme.colorScheme.secondary
                     )
+                    
+                    // Reports/Insights - clickable button
+                    OutlinedButton(
+                        onClick = {
+                            onReportsClick(
+                                uiState.period,
+                                uiState.selectedDate,
+                                uiState.selectedYearMonth,
+                                uiState.selectedYear
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Отчёты и инсайты")
+                    }
 
                 if (uiState.period != StatsPeriod.DAY) {
                     uiState.mostProfitableDayByIncome?.let { day ->

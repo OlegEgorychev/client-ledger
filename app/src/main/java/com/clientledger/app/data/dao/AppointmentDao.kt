@@ -159,6 +159,106 @@ interface AppointmentDao {
         """
     )
     suspend fun getCancellationsSeries(startDate: String, endDate: String): List<DayCancellations>
+    
+    // Clients Analytics queries
+    @Query(
+        """
+        SELECT COUNT(DISTINCT clientId) as uniqueClients,
+               0 as newClients,
+               0 as returningClients
+        FROM appointments 
+        WHERE dateKey >= :startDate AND dateKey <= :endDate AND status != 'CANCELED'
+        """
+    )
+    suspend fun getClientsSummary(startDate: String, endDate: String): ClientsSummary
+    
+    @Query(
+        """
+        SELECT 
+            c.id as clientId,
+            c.firstName || ' ' || c.lastName as clientName,
+            COALESCE(SUM(a.incomeCents), 0) as totalIncome,
+            COUNT(a.id) as visitCount,
+            0.0 as percentage
+        FROM appointments a
+        INNER JOIN clients c ON a.clientId = c.id
+        WHERE a.dateKey >= :startDate AND a.dateKey <= :endDate AND a.isPaid = 1 AND a.status != 'CANCELED'
+        GROUP BY c.id, c.firstName, c.lastName
+        ORDER BY totalIncome DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun getTopClientsByIncome(startDate: String, endDate: String, limit: Int = 10): List<TopClient>
+    
+    // Visits Analytics queries
+    @Query(
+        """
+        SELECT 
+            COUNT(*) as totalVisits,
+            SUM(CASE WHEN status = 'COMPLETED' AND isPaid = 1 THEN 1 ELSE 0 END) as completedVisits,
+            SUM(CASE WHEN status = 'CANCELED' THEN 1 ELSE 0 END) as canceledVisits,
+            0.0 as cancellationRate
+        FROM appointments 
+        WHERE dateKey >= :startDate AND dateKey <= :endDate
+        """
+    )
+    suspend fun getVisitsSummary(startDate: String, endDate: String): VisitsSummary
+    
+    @Query(
+        """
+        SELECT dateKey, COUNT(*) as visitsCount
+        FROM appointments 
+        WHERE dateKey >= :startDate AND dateKey <= :endDate AND status != 'CANCELED'
+        GROUP BY dateKey
+        ORDER BY dateKey ASC
+        """
+    )
+    suspend fun getVisitsSeries(startDate: String, endDate: String): List<DayVisits>
+    
+    // Insights queries
+    @Query(
+        """
+        SELECT dateKey, COUNT(*) as visitsCount
+        FROM appointments 
+        WHERE dateKey >= :startDate AND dateKey <= :endDate AND status != 'CANCELED'
+        GROUP BY dateKey
+        ORDER BY visitsCount DESC
+        LIMIT 1
+        """
+    )
+    suspend fun getBusiestDay(startDate: String, endDate: String): BusiestDay?
+    
+    @Query(
+        """
+        SELECT 
+            a.dateKey,
+            c.id as clientId,
+            c.firstName || ' ' || c.lastName as clientName,
+            a.incomeCents as amount
+        FROM appointments a
+        INNER JOIN clients c ON a.clientId = c.id
+        WHERE a.dateKey >= :startDate AND a.dateKey <= :endDate AND a.isPaid = 1 AND a.status != 'CANCELED'
+        ORDER BY a.incomeCents DESC
+        LIMIT 1
+        """
+    )
+    suspend fun getBiggestPayment(startDate: String, endDate: String): BiggestPayment?
+    
+    @Query(
+        """
+        SELECT 
+            c.id as clientId,
+            c.firstName || ' ' || c.lastName as clientName,
+            COUNT(a.id) as visitCount
+        FROM appointments a
+        INNER JOIN clients c ON a.clientId = c.id
+        WHERE a.dateKey >= :startDate AND a.dateKey <= :endDate AND a.status != 'CANCELED'
+        GROUP BY c.id, c.firstName, c.lastName
+        ORDER BY visitCount DESC
+        LIMIT 1
+        """
+    )
+    suspend fun getMostFrequentClient(startDate: String, endDate: String): MostFrequentClient?
 
     @Insert
     suspend fun insertAppointment(appointment: AppointmentEntity): Long
@@ -196,6 +296,53 @@ data class SummaryStats(
 data class DayCancellations(
     val dateKey: String,
     val cancellationsCount: Int
+)
+
+// Clients Analytics data classes
+data class ClientsSummary(
+    val uniqueClients: Int,
+    val newClients: Int,
+    val returningClients: Int
+)
+
+data class TopClient(
+    val clientId: Long,
+    val clientName: String,
+    val totalIncome: Long,
+    val visitCount: Int,
+    val percentage: Float
+)
+
+// Visits Analytics data classes
+data class VisitsSummary(
+    val totalVisits: Int,
+    val completedVisits: Int,
+    val canceledVisits: Int,
+    val cancellationRate: Double
+)
+
+data class DayVisits(
+    val dateKey: String,
+    val visitsCount: Int
+)
+
+// Insights data classes
+data class BusiestDay(
+    val dateKey: String,
+    val visitsCount: Int
+)
+
+data class BiggestPayment(
+    val dateKey: String,
+    val clientId: Long,
+    val clientName: String,
+    val amount: Long
+)
+
+data class MostFrequentClient(
+    val clientId: Long,
+    val clientName: String,
+    val visitCount: Int
 )
 
 

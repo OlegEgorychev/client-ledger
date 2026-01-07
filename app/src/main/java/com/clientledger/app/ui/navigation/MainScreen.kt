@@ -151,6 +151,15 @@ fun MainScreen(
                     ),
                     onIncomeClick = { period, date, yearMonth, year ->
                         navController.navigate("income_detail/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
+                    },
+                    onClientsClick = { period, date, yearMonth, year ->
+                        navController.navigate("clients_analytics/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
+                    },
+                    onVisitsClick = { period, date, yearMonth, year ->
+                        navController.navigate("visits_analytics/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
+                    },
+                    onReportsClick = { period, date, yearMonth, year ->
+                        navController.navigate("reports_insights/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
                     }
                 )
             }
@@ -187,6 +196,114 @@ fun MainScreen(
                     selectedYear = year,
                     repository = repository,
                     onBack = { navController.popBackStack() }
+                )
+            }
+            
+            // Clients Analytics Screen
+            composable("clients_analytics/{period}/{date}/{yearMonth}/{year}") { backStackEntry ->
+                val periodStr = backStackEntry.arguments?.getString("period")
+                val dateStr = backStackEntry.arguments?.getString("date")
+                val yearMonthStr = backStackEntry.arguments?.getString("yearMonth")
+                val yearStr = backStackEntry.arguments?.getString("year")
+                
+                val period = when (periodStr) {
+                    "DAY" -> com.clientledger.app.ui.viewmodel.StatsPeriod.DAY
+                    "MONTH" -> com.clientledger.app.ui.viewmodel.StatsPeriod.MONTH
+                    "YEAR" -> com.clientledger.app.ui.viewmodel.StatsPeriod.YEAR
+                    else -> com.clientledger.app.ui.viewmodel.StatsPeriod.MONTH
+                }
+                
+                val date = dateStr?.let { LocalDate.parse(it) } ?: LocalDate.now()
+                val yearMonth = yearMonthStr?.let {
+                    val parts = it.split("-")
+                    if (parts.size == 2) {
+                        java.time.YearMonth.of(parts[0].toInt(), parts[1].toInt())
+                    } else {
+                        java.time.YearMonth.now()
+                    }
+                } ?: java.time.YearMonth.now()
+                val year = yearStr?.toIntOrNull() ?: LocalDate.now().year
+                
+                com.clientledger.app.ui.screen.stats.ClientsAnalyticsScreen(
+                    period = period,
+                    selectedDate = date,
+                    selectedYearMonth = yearMonth,
+                    selectedYear = year,
+                    repository = repository,
+                    onBack = { navController.popBackStack() },
+                    onClientClick = onClientClick
+                )
+            }
+            
+            // Visits Analytics Screen
+            composable("visits_analytics/{period}/{date}/{yearMonth}/{year}") { backStackEntry ->
+                val periodStr = backStackEntry.arguments?.getString("period")
+                val dateStr = backStackEntry.arguments?.getString("date")
+                val yearMonthStr = backStackEntry.arguments?.getString("yearMonth")
+                val yearStr = backStackEntry.arguments?.getString("year")
+                
+                val period = when (periodStr) {
+                    "DAY" -> com.clientledger.app.ui.viewmodel.StatsPeriod.DAY
+                    "MONTH" -> com.clientledger.app.ui.viewmodel.StatsPeriod.MONTH
+                    "YEAR" -> com.clientledger.app.ui.viewmodel.StatsPeriod.YEAR
+                    else -> com.clientledger.app.ui.viewmodel.StatsPeriod.MONTH
+                }
+                
+                val date = dateStr?.let { LocalDate.parse(it) } ?: LocalDate.now()
+                val yearMonth = yearMonthStr?.let {
+                    val parts = it.split("-")
+                    if (parts.size == 2) {
+                        java.time.YearMonth.of(parts[0].toInt(), parts[1].toInt())
+                    } else {
+                        java.time.YearMonth.now()
+                    }
+                } ?: java.time.YearMonth.now()
+                val year = yearStr?.toIntOrNull() ?: LocalDate.now().year
+                
+                com.clientledger.app.ui.screen.stats.VisitsAnalyticsScreen(
+                    period = period,
+                    selectedDate = date,
+                    selectedYearMonth = yearMonth,
+                    selectedYear = year,
+                    repository = repository,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            
+            // Reports/Insights Screen
+            composable("reports_insights/{period}/{date}/{yearMonth}/{year}") { backStackEntry ->
+                val periodStr = backStackEntry.arguments?.getString("period")
+                val dateStr = backStackEntry.arguments?.getString("date")
+                val yearMonthStr = backStackEntry.arguments?.getString("yearMonth")
+                val yearStr = backStackEntry.arguments?.getString("year")
+                
+                val period = when (periodStr) {
+                    "DAY" -> com.clientledger.app.ui.viewmodel.StatsPeriod.DAY
+                    "MONTH" -> com.clientledger.app.ui.viewmodel.StatsPeriod.MONTH
+                    "YEAR" -> com.clientledger.app.ui.viewmodel.StatsPeriod.YEAR
+                    else -> com.clientledger.app.ui.viewmodel.StatsPeriod.MONTH
+                }
+                
+                val date = dateStr?.let { LocalDate.parse(it) } ?: LocalDate.now()
+                val yearMonth = yearMonthStr?.let {
+                    val parts = it.split("-")
+                    if (parts.size == 2) {
+                        java.time.YearMonth.of(parts[0].toInt(), parts[1].toInt())
+                    } else {
+                        java.time.YearMonth.now()
+                    }
+                } ?: java.time.YearMonth.now()
+                val year = yearStr?.toIntOrNull() ?: LocalDate.now().year
+                
+                com.clientledger.app.ui.screen.stats.ReportsInsightsScreen(
+                    period = period,
+                    selectedDate = date,
+                    selectedYearMonth = yearMonth,
+                    selectedYear = year,
+                    repository = repository,
+                    onBack = { navController.popBackStack() },
+                    onDayClick = internalOnDateClick,
+                    onClientClick = onClientClick
                 )
             }
         }

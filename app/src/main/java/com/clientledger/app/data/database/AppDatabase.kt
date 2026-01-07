@@ -10,13 +10,10 @@ import com.clientledger.app.data.dao.ExpenseDao
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.entity.ExpenseEntity
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 @Database(
     entities = [ClientEntity::class, AppointmentEntity::class, ExpenseEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -38,11 +35,6 @@ abstract class AppDatabase : RoomDatabase() {
                 .fallbackToDestructiveMigration() // Разрешаем автоматическое пересоздание БД при изменении схемы
                 .build()
                 INSTANCE = instance
-                
-                // Вставляем демо-данные при первом создании БД
-                CoroutineScope(Dispatchers.IO).launch {
-                    insertDemoData(instance.clientDao(), instance.appointmentDao(), instance.expenseDao())
-                }
                 
                 instance
             }

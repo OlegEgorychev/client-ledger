@@ -140,7 +140,7 @@ fun IncomeDetailScreen(
                 }
                 
                 // Top Insights
-                if (uiState.bestDay != null || uiState.bestClient != null || uiState.incomeComparison != null) {
+                if (uiState.bestDay != null || uiState.bestClient != null || uiState.incomeComparison != null || uiState.totalCancellations > 0) {
                     Card(
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -155,6 +155,72 @@ fun IncomeDetailScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
+                            
+                            // Cancellations KPI
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Отказы",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        Text(
+                                            text = "${uiState.totalCancellations}",
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        uiState.cancellationsComparison?.let { comp ->
+                                            val deltaText = if (comp.percentChange != null) {
+                                                "${if (comp.delta >= 0) "+" else ""}${comp.delta} (${String.format("%+.1f%%", comp.percentChange)})"
+                                            } else {
+                                                "${if (comp.delta >= 0) "+" else ""}${comp.delta}"
+                                            }
+                                            Text(
+                                                text = deltaText,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onErrorContainer
+                                            )
+                                        }
+                                    }
+                                }
+                                
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Процент отказов",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        Text(
+                                            text = String.format("%.1f%%", uiState.cancellationRate),
+                                            style = MaterialTheme.typography.titleLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                }
+                            }
                             
                             uiState.bestDay?.let { day ->
                                 InsightCard(

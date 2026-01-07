@@ -66,5 +66,29 @@ class AppointmentDetailsViewModel(
             repository.deleteAppointment(appointment)
         }
     }
+    
+    suspend fun cancelAppointment() {
+        val appointment = _uiState.value.appointment
+        if (appointment != null) {
+            val canceledAppointment = appointment.copy(
+                status = com.clientledger.app.data.entity.AppointmentStatus.CANCELED.name,
+                canceledAt = System.currentTimeMillis()
+            )
+            repository.updateAppointment(canceledAppointment)
+            loadAppointment() // Refresh to show updated state
+        }
+    }
+    
+    suspend fun restoreAppointment() {
+        val appointment = _uiState.value.appointment
+        if (appointment != null) {
+            val restoredAppointment = appointment.copy(
+                status = com.clientledger.app.data.entity.AppointmentStatus.COMPLETED.name,
+                canceledAt = null
+            )
+            repository.updateAppointment(restoredAppointment)
+            loadAppointment() // Refresh to show updated state
+        }
+    }
 }
 

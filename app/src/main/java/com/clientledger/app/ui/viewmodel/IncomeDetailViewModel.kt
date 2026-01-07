@@ -110,6 +110,28 @@ class IncomeDetailViewModel(
             // Find best day and best client
             val bestDay = incomeSeries.maxByOrNull { it.totalIncome }
             val bestClient = incomeByClient.maxByOrNull { it.totalIncome }
+            
+            // Cancellation stats
+            val totalCancellations = repository.getCancellationsCount(startDate, endDate)
+            val totalAppointments = repository.getTotalAppointmentsCount(startDate, endDate)
+            val cancellationRate = if (totalAppointments > 0) {
+                (totalCancellations.toDouble() / totalAppointments) * 100
+            } else {
+                0.0
+            }
+            
+            val prevTotalCancellations = repository.getCancellationsCount(prevStartDate, prevEndDate)
+            
+            val cancellationsComparison = CancellationComparison(
+                current = totalCancellations,
+                previous = prevTotalCancellations,
+                delta = totalCancellations - prevTotalCancellations,
+                percentChange = if (prevTotalCancellations != 0) {
+                    ((totalCancellations - prevTotalCancellations).toDouble() / prevTotalCancellations) * 100
+                } else {
+                    null
+                }
+            )
 
             _uiState.value = _uiState.value.copy(
                 totalIncome = totalIncome,
@@ -118,6 +140,9 @@ class IncomeDetailViewModel(
                 incomeComparison = incomeComparison,
                 bestDay = bestDay,
                 bestClient = bestClient,
+                totalCancellations = totalCancellations,
+                cancellationRate = cancellationRate,
+                cancellationsComparison = cancellationsComparison,
                 isLoading = false
             )
         }

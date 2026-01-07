@@ -42,6 +42,7 @@ fun AppointmentDetailsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showCancelDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
 
@@ -130,13 +131,17 @@ fun AppointmentDetailsScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    val isCanceled = uiState.appointment!!.status == com.clientledger.app.data.entity.AppointmentStatus.CANCELED.name
+                    
+                    // Primary actions
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
                             onClick = { onEdit(appointmentId) },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            enabled = !isCanceled
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
@@ -160,6 +165,29 @@ fun AppointmentDetailsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Удалить")
+                        }
+                    }
+                    
+                    // Cancel/Restore action
+                    if (!isCanceled) {
+                        OutlinedButton(
+                            onClick = { showCancelDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.secondary
+                            )
+                        ) {
+                            Text("Отменить запись")
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { scope.launch { viewModel.restoreAppointment() } },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text("Восстановить запись")
                         }
                     }
                 }
@@ -196,6 +224,35 @@ fun AppointmentDetailsScreen(
             }
         )
     }
+    
+    // Диалог подтверждения отмены
+    if (showCancelDialog) {
+        AlertDialog(
+            onDismissRequest = { showCancelDialog = false },
+            title = { Text("Отменить запись?") },
+            text = { Text("Запись будет отмечена как отмененная и будет учитываться в статистике.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            viewModel.cancelAppointment()
+                            showCancelDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.secondary
+                    )
+                ) {
+                    Text("Отменить запись")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCancelDialog = false }) {
+                    Text("Оставить")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -209,6 +266,7 @@ fun AppointmentInfoCard(
 ) {
     val dateTime = DateUtils.dateTimeToLocalDateTime(appointment.startsAt)
     val endDateTime = dateTime.plusMinutes(appointment.durationMinutes.toLong())
+    val isCanceled = appointment.status == com.clientledger.app.data.entity.AppointmentStatus.CANCELED.name
     
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -219,6 +277,21 @@ fun AppointmentInfoCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Status badge if canceled
+            if (isCanceled) {
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.errorContainer
+                ) {
+                    Text(
+                        text = "Отменено",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+            
             // Название услуги
             InfoRow(
                 label = "Название услуги",

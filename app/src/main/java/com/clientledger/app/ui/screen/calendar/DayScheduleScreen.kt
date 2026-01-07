@@ -606,6 +606,7 @@ fun AppointmentCardOnTimeline(
     }
     
     val colorScheme = MaterialTheme.colorScheme
+    val isCanceled = appointment.status == com.clientledger.app.data.entity.AppointmentStatus.CANCELED.name
     val borderColor = colorScheme.outline.copy(alpha = 0.5f)
     val borderWidth = 1.dp
     
@@ -637,10 +638,21 @@ fun AppointmentCardOnTimeline(
                     width = borderWidth,
                     color = borderColor,
                     shape = shape
+                )
+                .then(
+                    if (isCanceled) {
+                        Modifier.alpha(0.5f)
+                    } else {
+                        Modifier
+                    }
                 ),
             shape = shape,
             colors = CardDefaults.cardColors(
-                containerColor = colorScheme.primaryContainer
+                containerColor = if (isCanceled) {
+                    colorScheme.surfaceVariant
+                } else {
+                    colorScheme.primaryContainer
+                }
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
@@ -650,31 +662,59 @@ fun AppointmentCardOnTimeline(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                if (isCanceled) {
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Text(
+                            text = "Отменено",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                }
                 Text(
                     text = appointment.title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1
+                    maxLines = 1,
+                    color = if (isCanceled) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    }
                 )
                 Text(
                     text = timeRange,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    color = if (isCanceled) {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    } else {
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                    }
                 )
                 clientName?.let {
                     Text(
                         text = it,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                        color = if (isCanceled) {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        } else {
+                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        },
                         maxLines = 1
                     )
                 }
-                Text(
-                    text = MoneyUtils.formatCents(appointment.incomeCents),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                if (!isCanceled) {
+                    Text(
+                        text = MoneyUtils.formatCents(appointment.incomeCents),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
     }

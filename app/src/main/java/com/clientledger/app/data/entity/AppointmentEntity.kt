@@ -5,6 +5,12 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+enum class AppointmentStatus {
+    SCHEDULED,
+    COMPLETED,
+    CANCELED
+}
+
 @Entity(
     tableName = "appointments",
     foreignKeys = [
@@ -15,7 +21,7 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("clientId"), Index("dateKey"), Index("startsAt")]
+    indices = [Index("clientId"), Index("dateKey"), Index("startsAt"), Index("status")]
 )
 data class AppointmentEntity(
     @PrimaryKey(autoGenerate = true)
@@ -27,6 +33,9 @@ data class AppointmentEntity(
     val durationMinutes: Int = 60, // длительность сеанса в минутах, по умолчанию 60
     val incomeCents: Long, // >= 0
     val isPaid: Boolean,
+    val status: String = AppointmentStatus.COMPLETED.name, // SCHEDULED, COMPLETED, CANCELED
+    val canceledAt: Long? = null, // timestamp when canceled
+    val cancelReason: String? = null, // optional reason for cancellation
     val createdAt: Long
 )
 

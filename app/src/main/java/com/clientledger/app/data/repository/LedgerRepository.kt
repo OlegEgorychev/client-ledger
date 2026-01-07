@@ -109,6 +109,16 @@ class LedgerRepository(
     
     suspend fun getSummaryStats(startDate: String, endDate: String): SummaryStats =
         appointmentDao.getSummaryStats(startDate, endDate)
+    
+    // Cancellation statistics
+    suspend fun getCancellationsCount(startDate: String, endDate: String): Int =
+        appointmentDao.getCancellationsCount(startDate, endDate)
+    
+    suspend fun getTotalAppointmentsCount(startDate: String, endDate: String): Int =
+        appointmentDao.getTotalAppointmentsCount(startDate, endDate)
+    
+    suspend fun getCancellationsSeries(startDate: String, endDate: String): List<com.clientledger.app.data.dao.DayCancellations> =
+        appointmentDao.getCancellationsSeries(startDate, endDate)
 }
 
 

@@ -187,6 +187,14 @@ fun StatsScreen(
                         },
                         comparison = uiState.clientsComparison
                     )
+                    
+                    // Cancellations
+                    StatsCard(
+                        title = "Отказы",
+                        value = "${uiState.totalCancellations}",
+                        subtitle = "Процент отказов: ${String.format("%.1f%%", uiState.cancellationRate)}",
+                        color = MaterialTheme.colorScheme.error
+                    )
 
                     StatsCard(
                         title = "Расход",
@@ -235,7 +243,8 @@ fun StatsScreen(
 fun StatsCard(
     title: String,
     value: String,
-    color: androidx.compose.ui.graphics.Color
+    color: androidx.compose.ui.graphics.Color,
+    subtitle: String? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -257,6 +266,13 @@ fun StatsCard(
                 fontWeight = FontWeight.Bold,
                 color = color
             )
+            subtitle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

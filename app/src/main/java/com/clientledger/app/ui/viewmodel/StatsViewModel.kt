@@ -26,6 +26,13 @@ data class PeriodComparison(
     val percentChange: Double? // null if previous = 0
 )
 
+data class CancellationComparison(
+    val current: Int,
+    val previous: Int,
+    val delta: Int,
+    val percentChange: Double? // null if previous = 0
+)
+
 data class StatsUiState(
     val period: StatsPeriod = StatsPeriod.MONTH,
     val selectedDate: LocalDate = LocalDate.now(),
@@ -46,6 +53,10 @@ data class StatsUiState(
     val visitsComparison: PeriodComparison? = null,
     val clientsComparison: PeriodComparison? = null,
     val averageCheckComparison: PeriodComparison? = null,
+    // Cancellation stats
+    val totalCancellations: Int = 0,
+    val cancellationRate: Double = 0.0, // percentage (0-100)
+    val cancellationsComparison: CancellationComparison? = null,
     val isLoading: Boolean = false
 )
 
@@ -60,6 +71,10 @@ data class IncomeDetailState(
     val incomeComparison: PeriodComparison? = null,
     val bestDay: DayIncome? = null,
     val bestClient: ClientIncome? = null,
+    // Cancellation stats
+    val totalCancellations: Int = 0,
+    val cancellationRate: Double = 0.0,
+    val cancellationsComparison: CancellationComparison? = null,
     val isLoading: Boolean = false
 )
 
@@ -172,6 +187,29 @@ class StatsViewModel(private val repository: LedgerRepository) : ViewModel() {
                 }
                 return PeriodComparison(current, previous, delta, percentChange)
             }
+            
+            // Cancellation stats
+            val totalCancellations = repository.getCancellationsCount(startDate, endDate)
+            val totalAppointments = repository.getTotalAppointmentsCount(startDate, endDate)
+            val cancellationRate = if (totalAppointments > 0) {
+                (totalCancellations.toDouble() / totalAppointments) * 100
+            } else {
+                0.0
+            }
+            
+            val prevTotalCancellations = repository.getCancellationsCount(prevStartDate, prevEndDate)
+            val prevTotalAppointments = repository.getTotalAppointmentsCount(prevStartDate, prevEndDate)
+            
+            val cancellationsComparison = CancellationComparison(
+                current = totalCancellations,
+                previous = prevTotalCancellations,
+                delta = totalCancellations - prevTotalCancellations,
+                percentChange = if (prevTotalCancellations != 0) {
+                    ((totalCancellations - prevTotalCancellations).toDouble() / prevTotalCancellations) * 100
+                } else {
+                    null
+                }
+            )
 
             _uiState.value = _uiState.value.copy(
                 income = income,
@@ -187,6 +225,9 @@ class StatsViewModel(private val repository: LedgerRepository) : ViewModel() {
                 visitsComparison = calculateComparison(summary.totalVisits.toLong(), prevSummary.totalVisits.toLong()),
                 clientsComparison = calculateComparison(summary.totalClients.toLong(), prevSummary.totalClients.toLong()),
                 averageCheckComparison = calculateComparison(averageCheck, prevAverageCheck),
+                totalCancellations = totalCancellations,
+                cancellationRate = cancellationRate,
+                cancellationsComparison = cancellationsComparison,
                 isLoading = false
             )
         }

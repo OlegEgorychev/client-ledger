@@ -60,6 +60,8 @@ fun CalendarScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                // Reserve space for FAB so bottom widgets don't overlap with the "+" button
+                .padding(bottom = 88.dp)
         ) {
             // Навигация по месяцам
             MonthHeader(
@@ -384,19 +386,47 @@ fun AppointmentCard(
     appointment: AppointmentEntity,
     onClick: () -> Unit
 ) {
+    val isCanceled = appointment.status == com.clientledger.app.data.entity.AppointmentStatus.CANCELED.name
+    
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isCanceled) {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            if (isCanceled) {
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.errorContainer
+                ) {
+                    Text(
+                        text = "Отменено",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
             Text(
                 text = appointment.title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = if (isCanceled) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
             )
             Text(
                 text = DateUtils.formatDateTime(DateUtils.dateTimeToLocalDateTime(appointment.startsAt)),
@@ -470,7 +500,6 @@ fun StatisticsWidgets(
 ) {
     val today = LocalDate.now()
     val currentMonth = YearMonth.now()
-    val scope = rememberCoroutineScope()
     
     // Today income
     var todayIncome by remember { mutableStateOf(0L) }

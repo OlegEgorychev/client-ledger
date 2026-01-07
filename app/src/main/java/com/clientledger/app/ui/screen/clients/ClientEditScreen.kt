@@ -12,7 +12,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.repository.LedgerRepository
-import com.clientledger.app.ui.components.BirthDatePicker
 import com.clientledger.app.ui.components.PhoneInput
 import com.clientledger.app.ui.components.validatePhoneNumber
 import kotlinx.coroutines.launch
@@ -27,7 +26,6 @@ fun ClientEditScreen(
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("male") }
-    var birthDate by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var phoneError by remember { mutableStateOf<String?>(null) }
     var telegram by remember { mutableStateOf("") }
@@ -54,7 +52,6 @@ fun ClientEditScreen(
                     firstName = it.firstName
                     lastName = it.lastName
                     gender = it.gender
-                    birthDate = it.birthDate ?: ""
                     phone = it.phone ?: ""
                     telegram = it.telegram ?: ""
                     notes = it.notes ?: ""
@@ -131,16 +128,6 @@ fun ClientEditScreen(
                     )
                 }
             }
-
-            BirthDatePicker(
-                value = birthDate,
-                onValueChange = { birthDate = it },
-                label = "Дата рождения",
-                isRequired = false,
-                isError = false,
-                supportingText = null,
-                modifier = Modifier.fillMaxWidth()
-            )
 
             // Валидация телефона (required field)
             val (isPhoneFormatValid, phoneFormatError) = remember(phone) {
@@ -274,7 +261,7 @@ fun ClientEditScreen(
                                     firstName = trimmedFirstName,
                                     lastName = trimmedLastName,
                                     gender = gender,
-                                    birthDate = birthDate.ifBlank { null },
+                                    birthDate = null,
                                     phone = phone.trim().ifBlank { null }, // Phone is required, but keep nullable for consistency
                                     telegram = telegram.trim().ifBlank { null },
                                     notes = notes.trim().ifBlank { null },
@@ -287,7 +274,7 @@ fun ClientEditScreen(
                                     firstName = trimmedFirstName,
                                     lastName = trimmedLastName,
                                     gender = gender,
-                                    birthDate = birthDate.ifBlank { null },
+                                    birthDate = null,
                                     phone = phone.trim().ifBlank { null },
                                     telegram = telegram.trim().ifBlank { null },
                                     notes = notes.trim().ifBlank { null },

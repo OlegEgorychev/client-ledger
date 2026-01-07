@@ -177,9 +177,6 @@ fun ClientInfoCard(
                 "female" -> "Жен"
                 else -> "Муж" // Fallback для старых данных
             })
-            client.birthDate?.let { 
-                InfoRow("Дата рождения", DateUtils.formatBirthDate(it))
-            }
             PhoneInfoRow(
                 phone = client.phone,
                 onCallClick = { phone ->

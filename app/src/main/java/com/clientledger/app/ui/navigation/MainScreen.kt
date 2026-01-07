@@ -25,9 +25,8 @@ import com.clientledger.app.ui.viewmodel.StatsViewModel
 import java.time.LocalDate
 
 sealed class MainScreenDestination(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    object Today : MainScreenDestination("todayDay", "Сегодня", Icons.Default.Event)
-    object Clients : MainScreenDestination("clients", "Клиенты", Icons.Default.Person)
     object Calendar : MainScreenDestination("calendar", "Календарь", Icons.Default.CalendarToday)
+    object Clients : MainScreenDestination("clients", "Клиенты", Icons.Default.Person)
     object Stats : MainScreenDestination("stats", "Статистика", Icons.Default.BarChart)
 }
 
@@ -58,9 +57,8 @@ fun MainScreen(
     }
 
     val destinations = listOf(
-        MainScreenDestination.Today,
-        MainScreenDestination.Clients,
         MainScreenDestination.Calendar,
+        MainScreenDestination.Clients,
         MainScreenDestination.Stats
     )
 
@@ -73,8 +71,9 @@ fun MainScreen(
                         label = { Text(destination.title) },
                         selected = when {
                             currentRoute == destination.route -> true
-                            destination == MainScreenDestination.Today && 
-                                (currentRoute == "todayDay" || currentRoute?.startsWith("day/") == true) -> true
+                            // Treat Day screen as part of Calendar tab
+                            destination == MainScreenDestination.Calendar &&
+                                (currentRoute?.startsWith("day/") == true) -> true
                             else -> false
                         },
                         onClick = {
@@ -102,21 +101,9 @@ fun MainScreen(
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = "todayDay",
+            startDestination = MainScreenDestination.Calendar.route,
             modifier = Modifier.padding(paddingValues)
         ) {
-            // Экран "Сегодня" - расписание текущего дня
-            composable("todayDay") {
-                val today = LocalDate.now()
-                DayScheduleScreen(
-                    date = today,
-                    repository = repository,
-                    onBack = { /* Не нужен, так как BottomBar всегда виден */ },
-                    onAppointmentClick = onAppointmentClick,
-                    onDateChange = null // Переключение дней происходит внутри экрана через состояние
-                )
-            }
-            
             // Экран дня для выбранной даты
             composable("day/{dateIso}") { backStackEntry ->
                 val dateStr = backStackEntry.arguments?.getString("dateIso")

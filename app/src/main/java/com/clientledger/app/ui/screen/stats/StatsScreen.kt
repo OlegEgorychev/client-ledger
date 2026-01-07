@@ -6,17 +6,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.ui.viewmodel.StatsPeriod
 import com.clientledger.app.ui.viewmodel.StatsViewModel
-import kotlinx.coroutines.launch
 import com.clientledger.app.util.*
 import com.clientledger.app.util.MoneyUtils
 import java.time.LocalDate
@@ -29,15 +24,10 @@ fun StatsScreen(
     onIncomeClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> }
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
             TopAppBar(title = { Text("Статистика") })
-        },
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState)
         }
     ) { paddingValues ->
         Column(
@@ -77,8 +67,27 @@ fun StatsScreen(
             ) {
                 when (uiState.period) {
                 StatsPeriod.DAY -> {
-                    // TODO: DatePicker для дня
                     Text("Выбранный день: ${DateUtils.formatDate(uiState.selectedDate)}")
+                    val today = LocalDate.now()
+                    val isNextDayFuture = uiState.selectedDate.plusDays(1).isAfter(today)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.setDate(uiState.selectedDate.minusDays(1)) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Предыдущий")
+                        }
+                        Button(
+                            onClick = { viewModel.setDate(uiState.selectedDate.plusDays(1)) },
+                            modifier = Modifier.weight(1f),
+                            enabled = !isNextDayFuture
+                        ) {
+                            Text("Следующий")
+                        }
+                    }
                 }
                 StatsPeriod.MONTH -> {
                     Text("Выбранный месяц: ${DateUtils.formatMonth(uiState.selectedYearMonth)}")
@@ -151,7 +160,8 @@ fun StatsScreen(
                                 uiState.selectedYearMonth,
                                 uiState.selectedYear
                             )
-                        }
+                        },
+                        comparison = uiState.incomeComparison
                     )
 
                     // Visits count - clickable (for future)
@@ -162,7 +172,8 @@ fun StatsScreen(
                         color = MaterialTheme.colorScheme.secondary,
                         onClick = {
                             // Future: Navigate to Visits Analytics
-                        }
+                        },
+                        comparison = uiState.visitsComparison
                     )
 
                     // Clients count - clickable (for future)
@@ -173,7 +184,8 @@ fun StatsScreen(
                         color = MaterialTheme.colorScheme.tertiary,
                         onClick = {
                             // Future: Navigate to Clients Analytics
-                        }
+                        },
+                        comparison = uiState.clientsComparison
                     )
 
                     StatsCard(
@@ -214,94 +226,10 @@ fun StatsScreen(
                 }
             }
 
-            // Секция "О приложении" - всегда видна внизу
-            Divider(modifier = Modifier.padding(top = 16.dp, bottom = 16.dp))
-            AboutSection(
-                onVersionCopied = {
-                    scope.launch {
-                        snackbarHostState.showSnackbar("Версия скопирована в буфер обмена")
-                    }
-                }
-            )
         }
     }
 }
 
-@Composable
-fun AboutSection(
-    onVersionCopied: () -> Unit
-) {
-    val context = LocalContext.current
-    val packageInfo = remember {
-        try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                context.packageManager.getPackageInfo(context.packageName, 0)
-            } else {
-                @Suppress("DEPRECATION")
-                context.packageManager.getPackageInfo(context.packageName, 0)
-            }
-        } catch (e: Exception) {
-            null
-        }
-    }
-    
-    val versionName = packageInfo?.versionName ?: "Unknown"
-    val versionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-        packageInfo?.longVersionCode ?: 0L
-    } else {
-        @Suppress("DEPRECATION")
-        (packageInfo?.versionCode?.toLong() ?: 0L)
-    }
-    
-    Card(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "О приложении",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            
-            Text(
-                text = "Тестовая версия",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        val versionText = "Version $versionName ($versionCode)"
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Version", versionText)
-                        clipboard.setPrimaryClip(clip)
-                        onVersionCopied()
-                    }
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Версия: $versionName ($versionCode)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Нажмите, чтобы скопировать",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
 
 @Composable
 fun StatsCard(
@@ -339,7 +267,8 @@ fun ClickableStatsCard(
     value: String,
     subtitle: String,
     color: androidx.compose.ui.graphics.Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    comparison: com.clientledger.app.ui.viewmodel.PeriodComparison? = null
 ) {
     Card(
         modifier = Modifier
@@ -371,6 +300,25 @@ fun ClickableStatsCard(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            // Comparison delta
+            comparison?.let { comp ->
+                val deltaColor = if (comp.delta >= 0) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                }
+                val deltaText = if (comp.percentChange != null) {
+                    MoneyUtils.formatDeltaWithPercent(comp.delta, comp.percentChange)
+                } else {
+                    "${MoneyUtils.formatDelta(comp.delta)} (—)"
+                }
+                Text(
+                    text = deltaText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = deltaColor,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }

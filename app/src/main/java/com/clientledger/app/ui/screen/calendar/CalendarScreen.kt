@@ -23,6 +23,8 @@ import com.clientledger.app.data.entity.ExpenseEntity
 import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.util.*
 import com.clientledger.app.util.MoneyUtils
+import android.content.pm.PackageManager
+import androidx.compose.ui.platform.LocalContext
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -72,6 +74,10 @@ fun CalendarScreen(
                     onDateClick(date)
                 }
             )
+            
+            // Version info at the bottom
+            Spacer(modifier = Modifier.weight(1f))
+            VersionInfo()
         }
     }
 }
@@ -428,4 +434,30 @@ fun ExpenseCard(
     }
 }
 
+@Composable
+fun VersionInfo() {
+    val context = LocalContext.current
+    val versionName = remember {
+        try {
+            val packageInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+            packageInfo?.versionName ?: "Unknown"
+        } catch (e: Exception) {
+            "Unknown"
+        }
+    }
+    
+    Text(
+        text = "Version: $versionName",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    )
+}
 

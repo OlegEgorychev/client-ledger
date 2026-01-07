@@ -19,6 +19,13 @@ enum class StatsPeriod {
     DAY, MONTH, YEAR
 }
 
+data class PeriodComparison(
+    val current: Long,
+    val previous: Long,
+    val delta: Long,
+    val percentChange: Double? // null if previous = 0
+)
+
 data class StatsUiState(
     val period: StatsPeriod = StatsPeriod.MONTH,
     val selectedDate: LocalDate = LocalDate.now(),
@@ -34,6 +41,11 @@ data class StatsUiState(
     val totalVisits: Int = 0,
     val totalClients: Int = 0,
     val averageCheck: Long = 0,
+    // Period comparisons
+    val incomeComparison: PeriodComparison? = null,
+    val visitsComparison: PeriodComparison? = null,
+    val clientsComparison: PeriodComparison? = null,
+    val averageCheckComparison: PeriodComparison? = null,
     val isLoading: Boolean = false
 )
 
@@ -45,6 +57,9 @@ data class IncomeDetailState(
     val totalIncome: Long,
     val incomeSeries: List<DayIncome>,
     val incomeByClient: List<ClientIncome>,
+    val incomeComparison: PeriodComparison? = null,
+    val bestDay: DayIncome? = null,
+    val bestClient: ClientIncome? = null,
     val isLoading: Boolean = false
 )
 
@@ -100,8 +115,32 @@ class StatsViewModel(private val repository: LedgerRepository) : ViewModel() {
                     )
                 }
             }
+            
+            // Calculate previous period dates
+            val (prevStartDate, prevEndDate) = when (_uiState.value.period) {
+                StatsPeriod.DAY -> {
+                    val prevDate = _uiState.value.selectedDate.minusDays(1)
+                    Pair(prevDate.toDateKey(), prevDate.toDateKey())
+                }
+                StatsPeriod.MONTH -> {
+                    val prevMonth = _uiState.value.selectedYearMonth.minusMonths(1)
+                    Pair(
+                        DateUtils.getStartOfMonth(prevMonth).toDateKey(),
+                        DateUtils.getEndOfMonth(prevMonth).toDateKey()
+                    )
+                }
+                StatsPeriod.YEAR -> {
+                    val prevYear = _uiState.value.selectedYear - 1
+                    Pair(
+                        DateUtils.getStartOfYear(prevYear).toDateKey(),
+                        DateUtils.getEndOfYear(prevYear).toDateKey()
+                    )
+                }
+            }
 
             val summary = repository.getSummaryStats(startDate, endDate)
+            val prevSummary = repository.getSummaryStats(prevStartDate, prevEndDate)
+            
             val income = summary.totalIncome
             val expenses = repository.getExpensesForDateRange(startDate, endDate)
             val profit = income - expenses
@@ -116,6 +155,23 @@ class StatsViewModel(private val repository: LedgerRepository) : ViewModel() {
             } else {
                 0L
             }
+            
+            val prevAverageCheck = if (prevSummary.totalVisits > 0) {
+                prevSummary.totalIncome / prevSummary.totalVisits
+            } else {
+                0L
+            }
+            
+            // Calculate comparisons
+            fun calculateComparison(current: Long, previous: Long): PeriodComparison {
+                val delta = current - previous
+                val percentChange = if (previous != 0L) {
+                    ((current - previous).toDouble() / previous) * 100
+                } else {
+                    null
+                }
+                return PeriodComparison(current, previous, delta, percentChange)
+            }
 
             _uiState.value = _uiState.value.copy(
                 income = income,
@@ -127,6 +183,10 @@ class StatsViewModel(private val repository: LedgerRepository) : ViewModel() {
                 totalVisits = summary.totalVisits,
                 totalClients = summary.totalClients,
                 averageCheck = averageCheck,
+                incomeComparison = calculateComparison(income, prevSummary.totalIncome),
+                visitsComparison = calculateComparison(summary.totalVisits.toLong(), prevSummary.totalVisits.toLong()),
+                clientsComparison = calculateComparison(summary.totalClients.toLong(), prevSummary.totalClients.toLong()),
+                averageCheckComparison = calculateComparison(averageCheck, prevAverageCheck),
                 isLoading = false
             )
         }

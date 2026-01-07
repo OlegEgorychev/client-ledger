@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.clientledger.app.data.dao.ClientIncome
 import com.clientledger.app.data.dao.DayIncome
 import com.clientledger.app.data.repository.LedgerRepository
+import com.clientledger.app.ui.viewmodel.PeriodComparison
 import com.clientledger.app.util.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -67,14 +68,56 @@ class IncomeDetailViewModel(
                 }
             }
 
+            // Calculate previous period dates
+            val (prevStartDate, prevEndDate) = when (_uiState.value.period) {
+                StatsPeriod.DAY -> {
+                    val prevDate = _uiState.value.selectedDate.minusDays(1)
+                    Pair(prevDate.toDateKey(), prevDate.toDateKey())
+                }
+                StatsPeriod.MONTH -> {
+                    val prevMonth = _uiState.value.selectedYearMonth.minusMonths(1)
+                    Pair(
+                        com.clientledger.app.util.DateUtils.getStartOfMonth(prevMonth).toDateKey(),
+                        com.clientledger.app.util.DateUtils.getEndOfMonth(prevMonth).toDateKey()
+                    )
+                }
+                StatsPeriod.YEAR -> {
+                    val prevYear = _uiState.value.selectedYear - 1
+                    Pair(
+                        com.clientledger.app.util.DateUtils.getStartOfYear(prevYear).toDateKey(),
+                        com.clientledger.app.util.DateUtils.getEndOfYear(prevYear).toDateKey()
+                    )
+                }
+            }
+            
             val totalIncome = repository.getIncomeForDateRange(startDate, endDate)
+            val prevIncome = repository.getIncomeForDateRange(prevStartDate, prevEndDate)
             val incomeSeries = repository.getIncomeSeries(startDate, endDate)
             val incomeByClient = repository.getIncomeByClient(startDate, endDate)
+            
+            // Calculate comparison
+            val incomeComparison = PeriodComparison(
+                current = totalIncome,
+                previous = prevIncome,
+                delta = totalIncome - prevIncome,
+                percentChange = if (prevIncome != 0L) {
+                    ((totalIncome - prevIncome).toDouble() / prevIncome) * 100
+                } else {
+                    null
+                }
+            )
+            
+            // Find best day and best client
+            val bestDay = incomeSeries.maxByOrNull { it.totalIncome }
+            val bestClient = incomeByClient.maxByOrNull { it.totalIncome }
 
             _uiState.value = _uiState.value.copy(
                 totalIncome = totalIncome,
                 incomeSeries = incomeSeries,
                 incomeByClient = incomeByClient,
+                incomeComparison = incomeComparison,
+                bestDay = bestDay,
+                bestClient = bestClient,
                 isLoading = false
             )
         }

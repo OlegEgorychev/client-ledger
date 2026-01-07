@@ -270,8 +270,9 @@ fun AppointmentEditScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(scrollState)
                     .padding(paddingValues)
+                    .imePadding()
+                    .verticalScroll(scrollState)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -826,6 +827,9 @@ fun AppointmentEditScreen(
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
+            
+            // Extra bottom padding for better accessibility with large font scales
+            Spacer(modifier = Modifier.height(16.dp))
             }
             
             // Overlay с индикатором загрузки во время сохранения

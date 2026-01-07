@@ -1,6 +1,8 @@
 package com.clientledger.app.ui.screen.clients
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -62,10 +64,13 @@ fun ClientEditScreen(
             )
         }
     ) { paddingValues ->
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .imePadding()
+                .verticalScroll(scrollState)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -160,6 +165,9 @@ fun ClientEditScreen(
                 )
             }
 
+            // Bottom padding to ensure Save button is always reachable
+            Spacer(modifier = Modifier.height(8.dp))
+            
             Button(
                 onClick = {
                     if (firstName.isBlank() || lastName.isBlank()) {
@@ -239,6 +247,9 @@ fun ClientEditScreen(
                     Text("Сохранить")
                 }
             }
+            
+            // Extra bottom padding for better accessibility with large font scales
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

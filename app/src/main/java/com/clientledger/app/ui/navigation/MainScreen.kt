@@ -134,6 +134,10 @@ fun MainScreen(
                     onDateClick = internalOnDateClick,
                     onAddAppointment = onAddAppointment,
                     onAddExpense = onAddExpense,
+                    onIncomeDetailClick = { period, date, yearMonth, year ->
+                        navController.navigate("income_detail/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
+                    },
+                    repository = repository,
                     viewModel = viewModel(
                         factory = CalendarViewModelFactory(repository)
                     )

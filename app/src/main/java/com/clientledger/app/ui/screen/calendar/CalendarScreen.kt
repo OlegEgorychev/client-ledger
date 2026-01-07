@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.ExpenseEntity
+import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.util.*
 import com.clientledger.app.util.MoneyUtils
@@ -34,6 +35,8 @@ fun CalendarScreen(
     onDateClick: (LocalDate) -> Unit,
     onAddAppointment: () -> Unit,
     onAddExpense: () -> Unit,
+    onIncomeDetailClick: ((com.clientledger.app.ui.viewmodel.StatsPeriod, LocalDate, YearMonth, Int) -> Unit)? = null,
+    repository: com.clientledger.app.data.repository.LedgerRepository? = null,
     viewModel: CalendarViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -75,8 +78,33 @@ fun CalendarScreen(
                 }
             )
             
-            // Version info at the bottom
+            // Statistics widgets at the bottom
             Spacer(modifier = Modifier.weight(1f))
+            if (repository != null && onIncomeDetailClick != null) {
+                StatisticsWidgets(
+                    repository = repository,
+                    onTodayClick = {
+                        val today = LocalDate.now()
+                        onIncomeDetailClick(
+                            com.clientledger.app.ui.viewmodel.StatsPeriod.DAY,
+                            today,
+                            YearMonth.now(),
+                            today.year
+                        )
+                    },
+                    onMonthClick = {
+                        val currentMonth = YearMonth.now()
+                        onIncomeDetailClick(
+                            com.clientledger.app.ui.viewmodel.StatsPeriod.MONTH,
+                            LocalDate.now(),
+                            currentMonth,
+                            currentMonth.year
+                        )
+                    }
+                )
+            }
+            
+            // Version info at the bottom
             VersionInfo()
         }
     }
@@ -429,6 +457,104 @@ fun ExpenseCard(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
+@Composable
+fun StatisticsWidgets(
+    repository: LedgerRepository,
+    onTodayClick: () -> Unit,
+    onMonthClick: () -> Unit
+) {
+    val today = LocalDate.now()
+    val currentMonth = YearMonth.now()
+    val scope = rememberCoroutineScope()
+    
+    // Today income
+    var todayIncome by remember { mutableStateOf(0L) }
+    
+    // Month income
+    var monthIncome by remember { mutableStateOf(0L) }
+    
+    // Refresh when appointments change - observe appointments flow
+    val todayAppointments = repository.getAppointmentsByDate(today.toDateKey())
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    val monthAppointments = repository.getAppointmentsByDateRange(
+        DateUtils.getStartOfMonth(currentMonth).toDateKey(),
+        DateUtils.getEndOfMonth(currentMonth).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    // Load today income when date or appointments change
+    LaunchedEffect(today, todayAppointments.value) {
+        val dateKey = today.toDateKey()
+        todayIncome = repository.getIncomeForDateRange(dateKey, dateKey)
+    }
+    
+    // Load month income when month or appointments change
+    LaunchedEffect(currentMonth, monthAppointments.value) {
+        val startDate = DateUtils.getStartOfMonth(currentMonth).toDateKey()
+        val endDate = DateUtils.getEndOfMonth(currentMonth).toDateKey()
+        monthIncome = repository.getIncomeForDateRange(startDate, endDate)
+    }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Today widget
+        StatisticsWidget(
+            title = "Сегодня",
+            value = MoneyUtils.formatCents(todayIncome),
+            onClick = onTodayClick,
+            modifier = Modifier.weight(1f)
+        )
+        
+        // Month widget
+        StatisticsWidget(
+            title = "Этот месяц",
+            value = MoneyUtils.formatCents(monthIncome),
+            onClick = onMonthClick,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun StatisticsWidget(
+    title: String,
+    value: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }

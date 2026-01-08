@@ -34,6 +34,7 @@ sealed class MainScreenDestination(val route: String, val title: String, val ico
 @Composable
 fun MainScreen(
     repository: LedgerRepository,
+    themePreferences: com.clientledger.app.data.preferences.ThemePreferences,
     onClientClick: (Long) -> Unit,
     onAddClient: () -> Unit,
     onDateClick: (LocalDate) -> Unit,
@@ -138,6 +139,7 @@ fun MainScreen(
                         navController.navigate("income_detail/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
                     },
                     repository = repository,
+                    themePreferences = themePreferences,
                     viewModel = viewModel(
                         factory = CalendarViewModelFactory(repository)
                     )

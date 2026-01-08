@@ -26,8 +26,13 @@ import com.clientledger.app.ui.screen.calendar.ExpenseEditScreen
 import com.clientledger.app.ui.screen.clients.ClientDetailScreen
 import com.clientledger.app.ui.screen.clients.ClientEditScreen
 import com.clientledger.app.ui.theme.ClientLedgerTheme
+import com.clientledger.app.ui.theme.ThemeMode
+import com.clientledger.app.data.preferences.ThemePreferences
 import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
@@ -36,14 +41,17 @@ class MainActivity : ComponentActivity() {
         
         val app = application as LedgerApplication
         val repository = app.repository
+        val themePreferences = ThemePreferences(this)
 
         setContent {
-            ClientLedgerTheme {
+            val themeMode by themePreferences.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.DARK)
+            
+            ClientLedgerTheme(themeMode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation(repository)
+                    AppNavigation(repository, themePreferences)
                 }
             }
         }
@@ -51,7 +59,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AppNavigation(repository: LedgerRepository) {
+fun AppNavigation(
+    repository: LedgerRepository,
+    themePreferences: ThemePreferences
+) {
     val navController = rememberNavController()
 
     NavHost(
@@ -71,6 +82,7 @@ fun AppNavigation(repository: LedgerRepository) {
         composable("main") {
             MainScreen(
                 repository = repository,
+                themePreferences = themePreferences,
                 onClientClick = { clientId ->
                     navController.navigate("client_detail/$clientId")
                 },

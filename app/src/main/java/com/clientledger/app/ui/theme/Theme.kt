@@ -47,47 +47,54 @@ private val DarkColorScheme = darkColorScheme(
 private val LightColorScheme = lightColorScheme(
     primary = Indigo,
     onPrimary = Color.White,
-    primaryContainer = LightIndigo,
-    onPrimaryContainer = Color.White,
+    primaryContainer = Color(0xFFE3E7F1), // Slightly more visible indigo tint
+    onPrimaryContainer = Color(0xFF1A237E), // Darker indigo for better contrast
     
     secondary = CoolBlue,
     onSecondary = Color.White,
-    secondaryContainer = LightCyan,
-    onSecondaryContainer = DeepBlue,
+    secondaryContainer = Color(0xFFD6EDF5), // More visible cyan tint
+    onSecondaryContainer = Color(0xFF01579B), // Darker blue for better contrast
     
     tertiary = SoftGreen,
     onTertiary = Color.White,
-    tertiaryContainer = LightGreen,
-    onTertiaryContainer = DeepBlue,
+    tertiaryContainer = Color(0xFFE1F5E1), // More visible green tint
+    onTertiaryContainer = Color(0xFF2E7D32), // Darker green for better contrast
     
     error = MutedRed,
     onError = Color.White,
-    errorContainer = LightRed,
-    onErrorContainer = Color.White,
+    errorContainer = Color(0xFFFFE5E5), // More visible red tint
+    onErrorContainer = Color(0xFFB71C1C), // Darker red for better contrast
     
-    background = Color(0xFFF5F7FA),
-    onBackground = DeepBlue,
-    surface = Color.White,
-    onSurface = DeepBlue,
-    surfaceVariant = Color(0xFFE8EAF6),
-    onSurfaceVariant = Indigo,
+    background = LightBackground,
+    onBackground = Color(0xFF0D0D0D), // Very dark, almost black (high contrast, modern 2025)
+    surface = LightSurface,
+    onSurface = Color(0xFF0D0D0D), // Very dark for maximum readability
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = Color(0xFF495057), // Darker gray for better secondary text contrast
     
-    outline = Color(0xFF9FA8DA),
-    outlineVariant = Color(0xFFC5CAE9)
+    outline = LightOutline,
+    outlineVariant = LightOutlineVariant
 )
 
 @Composable
 fun ClientLedgerTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true, // Default to dark, will be overridden by themeMode
+    themeMode: com.clientledger.app.ui.theme.ThemeMode? = null,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val isDark = when (themeMode) {
+        com.clientledger.app.ui.theme.ThemeMode.LIGHT -> false
+        com.clientledger.app.ui.theme.ThemeMode.DARK -> true
+        null -> darkTheme // Fallback to parameter if themeMode is null
+    }
+    
+    val colorScheme = if (isDark) DarkColorScheme else LightColorScheme
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDark
         }
     }
 

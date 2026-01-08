@@ -5,6 +5,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.PressGestureScope
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -43,6 +47,7 @@ fun CalendarScreen(
     onAddExpense: () -> Unit,
     onIncomeDetailClick: ((com.clientledger.app.ui.viewmodel.StatsPeriod, LocalDate, YearMonth, Int) -> Unit)? = null,
     repository: com.clientledger.app.data.repository.LedgerRepository? = null,
+    themePreferences: com.clientledger.app.data.preferences.ThemePreferences? = null,
     viewModel: CalendarViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -114,6 +119,12 @@ fun CalendarScreen(
                         )
                     }
                 )
+            }
+            
+            // Theme selector (between stats widgets and version)
+            if (themePreferences != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                ThemeSelector(themePreferences = themePreferences)
             }
             
             // Version info at the bottom
@@ -616,6 +627,56 @@ fun StatisticsWidget(
 }
 
 @Composable
+fun ThemeSelector(
+    themePreferences: com.clientledger.app.data.preferences.ThemePreferences
+) {
+    val themeMode by themePreferences.themeMode.collectAsStateWithLifecycle(initialValue = com.clientledger.app.ui.theme.ThemeMode.DARK)
+    val scope = rememberCoroutineScope()
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Тема",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Light theme option
+            FilterChip(
+                selected = themeMode == com.clientledger.app.ui.theme.ThemeMode.LIGHT,
+                onClick = {
+                    scope.launch {
+                        themePreferences.setThemeMode(com.clientledger.app.ui.theme.ThemeMode.LIGHT)
+                    }
+                },
+                label = { Text("Светлая") },
+                modifier = Modifier.weight(1f)
+            )
+            
+            // Dark theme option
+            FilterChip(
+                selected = themeMode == com.clientledger.app.ui.theme.ThemeMode.DARK,
+                onClick = {
+                    scope.launch {
+                        themePreferences.setThemeMode(com.clientledger.app.ui.theme.ThemeMode.DARK)
+                    }
+                },
+                label = { Text("Тёмная") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
 fun VersionInfo(
     repository: com.clientledger.app.data.repository.LedgerRepository? = null,
     viewModel: CalendarViewModel? = null
@@ -623,7 +684,36 @@ fun VersionInfo(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showTestDataDialog by remember { mutableStateOf(false) }
+    var holdProgress by remember { mutableStateOf(0f) } // 0.0 to 1.0
+    var isHolding by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    
+    // Track progress when holding
+    LaunchedEffect(isHolding) {
+        if (isHolding) {
+            holdProgress = 0f
+            val holdDuration = 5000L // 5 seconds
+            val updateInterval = 50L // Update every 50ms
+            val steps = (holdDuration / updateInterval).toInt()
+            
+            repeat(steps) {
+                delay(updateInterval)
+                if (isHolding) {
+                    holdProgress = (it + 1).toFloat() / steps
+                } else {
+                    return@LaunchedEffect
+                }
+            }
+            
+            if (isHolding && holdProgress >= 1f) {
+                showTestDataDialog = true
+                isHolding = false
+                holdProgress = 0f
+            }
+        } else {
+            holdProgress = 0f
+        }
+    }
     
     val versionName = remember {
         try {
@@ -648,26 +738,70 @@ fun VersionInfo(
     }
     
     Box {
-        Text(
-            text = "версия $versionName",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .then(
                     if (isDebug && repository != null) {
-                        Modifier.clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) {
-                            showTestDataDialog = true
+                        Modifier.pointerInput(Unit) {
+                            detectTapGestures(
+                                onPress = { offset ->
+                                    isHolding = true
+                                    val progressJob = scope.launch {
+                                        val holdDuration = 5000L // 5 seconds
+                                        val updateInterval = 50L // Update every 50ms
+                                        val steps = (holdDuration / updateInterval).toInt()
+                                        
+                                        repeat(steps) {
+                                            delay(updateInterval)
+                                            if (isHolding) {
+                                                holdProgress = (it + 1).toFloat() / steps
+                                            }
+                                        }
+                                        
+                                        if (isHolding && holdProgress >= 1f) {
+                                            showTestDataDialog = true
+                                        }
+                                    }
+                                    
+                                    // Wait for release (this will block until finger is lifted)
+                                    tryAwaitRelease()
+                                    
+                                    isHolding = false
+                                    holdProgress = 0f
+                                    progressJob.cancel()
+                                }
+                            )
                         }
                     } else {
                         Modifier
                     }
                 )
-        )
+        ) {
+            Text(
+                text = "версия $versionName",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isHolding) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                }
+            )
+            
+            // Progress indicator during hold
+            if (isHolding && isDebug && repository != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    progress = { holdProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            }
+        }
     }
     
     // Test data dialog (DEBUG ONLY)

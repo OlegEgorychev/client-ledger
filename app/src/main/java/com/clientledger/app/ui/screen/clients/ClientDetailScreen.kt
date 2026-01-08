@@ -3,6 +3,7 @@ package com.clientledger.app.ui.screen.clients
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Phone
@@ -70,8 +71,12 @@ fun ClientDetailScreen(
                     }
                 },
                 navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text("Назад")
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Назад",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             )
@@ -105,11 +110,19 @@ fun ClientDetailScreen(
                     ) {
                         Text("Редактировать")
                     }
-                    OutlinedButton(
+                    Button(
                         onClick = { showDeleteDialog = true },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = null)
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Удалить")
                     }
@@ -162,21 +175,56 @@ fun ClientInfoCard(
     val context = LocalContext.current
 
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            InfoRow("Имя", client.firstName)
-            InfoRow("Фамилия", client.lastName)
-            InfoRow("Пол", when (client.gender) {
-                "male" -> "Муж"
-                "female" -> "Жен"
-                else -> "Муж" // Fallback для старых данных
-            })
+            // Client name - primary element
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Имя",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "${client.firstName} ${client.lastName}",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            
+            // Divider
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+            
+            // Contact info section
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Контактная информация",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                
+                InfoRow("Пол", when (client.gender) {
+                    "male" -> "Муж"
+                    "female" -> "Жен"
+                    else -> "Муж" // Fallback для старых данных
+                })
             PhoneInfoRow(
                 phone = client.phone,
                 onCallClick = { phone ->
@@ -199,20 +247,29 @@ fun ClientInfoCard(
                     }
                 }
             )
-            client.notes?.let { InfoRow("Заметки", it) }
+                client.notes?.let { InfoRow("Заметки", it) }
+            }
             
-            // Разделитель
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            
-            // Статистика
-            Text(
-                text = "Статистика",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+            // Divider before statistics
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
             )
-            InfoRow("Количество визитов", appointmentsCount.toString())
-            InfoRow("Всего оплачено", MoneyUtils.formatCents(totalIncome))
+            
+            // Statistics section
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Статистика",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                InfoRow("Количество визитов", appointmentsCount.toString())
+                InfoRow("Всего оплачено", MoneyUtils.formatCents(totalIncome))
+            }
         }
     }
 }
@@ -242,6 +299,7 @@ fun PhoneInfoRow(
     onCallClick: (String) -> Unit
 ) {
     val isValidPhone = PhoneUtils.isValidPhoneForCall(phone)
+    val accentColor = MaterialTheme.colorScheme.secondary
     
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -255,29 +313,35 @@ fun PhoneInfoRow(
         )
         Row(
             modifier = if (isValidPhone) {
-                Modifier.clickable { onCallClick(phone!!) }
+                Modifier
+                    .clickable { onCallClick(phone!!) }
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
             } else {
                 Modifier
             },
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isValidPhone) {
                 Icon(
                     Icons.Default.Phone,
                     contentDescription = "Позвонить",
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    modifier = Modifier.size(20.dp),
+                    tint = accentColor
                 )
             }
             Text(
                 text = phone?.takeIf { it.isNotBlank() } ?: "Не указан",
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                color = if (isValidPhone) {
-                    MaterialTheme.colorScheme.primary
+                fontWeight = if (isValidPhone) {
+                    androidx.compose.ui.text.font.FontWeight.SemiBold
                 } else {
-                    MaterialTheme.colorScheme.onSurface
+                    androidx.compose.ui.text.font.FontWeight.Medium
+                },
+                color = if (isValidPhone) {
+                    accentColor
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
                 },
                 textDecoration = if (isValidPhone) {
                     TextDecoration.Underline
@@ -296,6 +360,7 @@ fun TelegramInfoRow(
 ) {
     val isValidTelegram = TelegramUtils.isValidUsername(telegram)
     val displayText = telegram?.takeIf { it.isNotBlank() } ?: "Не указан"
+    val accentColor = MaterialTheme.colorScheme.secondary
     
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -309,29 +374,35 @@ fun TelegramInfoRow(
         )
         Row(
             modifier = if (isValidTelegram) {
-                Modifier.clickable { onTelegramClick(telegram!!) }
+                Modifier
+                    .clickable { onTelegramClick(telegram!!) }
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
             } else {
                 Modifier
             },
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isValidTelegram) {
                 Icon(
                     Icons.Default.Message,
                     contentDescription = "Открыть чат в Telegram",
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    modifier = Modifier.size(20.dp),
+                    tint = accentColor
                 )
             }
             Text(
                 text = displayText,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                color = if (isValidTelegram) {
-                    MaterialTheme.colorScheme.primary
+                fontWeight = if (isValidTelegram) {
+                    androidx.compose.ui.text.font.FontWeight.SemiBold
                 } else {
-                    MaterialTheme.colorScheme.onSurface
+                    androidx.compose.ui.text.font.FontWeight.Medium
+                },
+                color = if (isValidTelegram) {
+                    accentColor
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
                 },
                 textDecoration = if (isValidTelegram) {
                     TextDecoration.Underline

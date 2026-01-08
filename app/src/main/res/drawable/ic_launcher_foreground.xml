@@ -4,18 +4,102 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    
+    <!-- Calendar top tabs (white/light) -->
     <group
-        android:scaleX="0.5"
-        android:scaleY="0.5"
-        android:translateX="27"
-        android:translateY="27">
-        <path
-            android:fillColor="#000000"
-            android:pathData="M54,54m-27,0a27,27 0,1 1,54 0a27,27 0,1 1,-54 0" />
+        android:translateX="18"
+        android:translateY="18">
+        <!-- Top calendar header tabs -->
         <path
             android:fillColor="#FFFFFF"
-            android:pathData="M54,27C39.641,27 27,39.641 27,54C27,68.359 39.641,81 54,81C68.359,81 81,68.359 81,54C81,39.641 68.359,27 54,27zM54,72C44.075,72 36,63.925 36,54C36,44.075 44.075,36 54,36C63.925,36 72,44.075 72,54C72,63.925 63.925,72 54,72z" />
+            android:pathData="M0,0h72v12h-72z" />
+        <path
+            android:fillColor="#E3F2FD"
+            android:pathData="M0,0h24v12h-24z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M24,0h24v12h-24z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M48,0h24v12h-24z" />
+        
+        <!-- Calendar grid outline -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2"
+            android:pathData="M0,12h72v60h-72z" />
+        
+        <!-- Calendar grid lines (vertical) -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1"
+            android:pathData="M24,12v60" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1"
+            android:pathData="M48,12v60" />
+        
+        <!-- Calendar grid lines (horizontal) -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1"
+            android:pathData="M0,24h72" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1"
+            android:pathData="M0,36h72" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1"
+            android:pathData="M0,48h72" />
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="1"
+            android:pathData="M0,60h72" />
     </group>
+    
+    <!-- Growth line (upward arrow/chart line) - soft green/teal -->
+    <group
+        android:translateX="20"
+        android:translateY="50">
+        <!-- Growth line path: bottom-left to top-right -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#4DD0E1"
+            android:strokeWidth="4"
+            android:pathData="M8,48 L24,36 L40,24 L56,12" />
+        
+        <!-- Arrow head at the end -->
+        <path
+            android:fillColor="#4DD0E1"
+            android:pathData="M56,12 L50,8 L52,12 L50,16 Z" />
+    </group>
+    
+    <!-- Data points (dots) - using path instead of circle -->
+    <!-- Circle at (28, 86) with radius 4 -->
+    <path
+        android:fillColor="#4DD0E1"
+        android:pathData="M28,86m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    
+    <!-- Circle at (44, 74) with radius 4 -->
+    <path
+        android:fillColor="#4DD0E1"
+        android:pathData="M44,74m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    
+    <!-- Circle at (60, 62) with radius 4 -->
+    <path
+        android:fillColor="#4DD0E1"
+        android:pathData="M60,62m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    
+    <!-- Circle at (76, 50) with radius 4 -->
+    <path
+        android:fillColor="#4DD0E1"
+        android:pathData="M76,50m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
 </vector>
-
-

@@ -78,7 +78,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun ClientLedgerTheme(
-    darkTheme: Boolean = true, // Default to dark, will be overridden by themeMode
+    darkTheme: Boolean = false, // Default to light, will be overridden by themeMode
     themeMode: com.clientledger.app.ui.theme.ThemeMode? = null,
     content: @Composable () -> Unit
 ) {

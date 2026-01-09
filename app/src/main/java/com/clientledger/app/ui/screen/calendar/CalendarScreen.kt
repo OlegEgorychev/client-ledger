@@ -139,10 +139,11 @@ fun CalendarScreen(
             }
             
             // Theme selector (between stats widgets and version)
-            if (themePreferences != null) {
-                Spacer(modifier = Modifier.height(16.dp))
-                ThemeSelector(themePreferences = themePreferences)
-            }
+            // TODO: Uncomment to restore theme switcher
+            // if (themePreferences != null) {
+            //     Spacer(modifier = Modifier.height(16.dp))
+            //     ThemeSelector(themePreferences = themePreferences)
+            // }
             
             // Version info at the bottom
             Spacer(modifier = Modifier.height(8.dp))
@@ -659,7 +660,7 @@ fun StatisticsWidget(
 fun ThemeSelector(
     themePreferences: com.clientledger.app.data.preferences.ThemePreferences
 ) {
-    val themeMode by themePreferences.themeMode.collectAsStateWithLifecycle(initialValue = com.clientledger.app.ui.theme.ThemeMode.DARK)
+    val themeMode by themePreferences.themeMode.collectAsStateWithLifecycle(initialValue = com.clientledger.app.ui.theme.ThemeMode.LIGHT)
     val scope = rememberCoroutineScope()
     
     Column(

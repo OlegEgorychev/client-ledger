@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val themeMode by themePreferences.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.DARK)
+            val themeMode by themePreferences.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.LIGHT)
             
             ClientLedgerTheme(themeMode = themeMode) {
                 Surface(

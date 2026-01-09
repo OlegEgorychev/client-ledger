@@ -16,11 +16,11 @@ private val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
 
 class ThemePreferences(private val context: Context) {
     val themeMode: Flow<ThemeMode> = context.dataStore.data.map { preferences ->
-        val modeString = preferences[THEME_MODE_KEY] ?: ThemeMode.DARK.name
+        val modeString = preferences[THEME_MODE_KEY] ?: ThemeMode.LIGHT.name
         try {
             ThemeMode.valueOf(modeString)
         } catch (e: IllegalArgumentException) {
-            ThemeMode.DARK // Default to dark
+            ThemeMode.LIGHT // Default to light
         }
     }
 

@@ -272,8 +272,7 @@ fun DayScheduleScreen(
                     onAppointmentClick(appointmentId)
                 },
                 onExpenseClick = { expenseId ->
-                    // Navigate to expense edit screen
-                    // TODO: Implement navigation to expense edit
+                    onExpenseClick(expenseId)
                 },
                 modifier = Modifier.padding(paddingValues)
             )
@@ -819,7 +818,9 @@ fun AppointmentCardOnTimeline(
             
             // Card with adjusted width
             Box(
-                modifier = Modifier.fillMaxWidth(widthFraction)
+                modifier = Modifier
+                    .fillMaxWidth(widthFraction)
+                    .fillMaxHeight()
             ) {
                 // Разделитель между соседними записями (если есть следующая запись)
                 if (hasNextAdjacent) {
@@ -991,7 +992,9 @@ fun ExpenseCardOnTimeline(
             
             // Card with adjusted width
             Box(
-                modifier = Modifier.fillMaxWidth(widthFraction)
+                modifier = Modifier
+                    .fillMaxWidth(widthFraction)
+                    .fillMaxHeight()
             ) {
                 Card(
                     onClick = onClick,

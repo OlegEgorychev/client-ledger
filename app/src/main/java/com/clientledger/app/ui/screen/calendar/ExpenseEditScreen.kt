@@ -2,10 +2,14 @@ package com.clientledger.app.ui.screen.calendar
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.entity.ExpenseEntity
@@ -13,11 +17,12 @@ import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.util.*
 import com.clientledger.app.util.MoneyUtils
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ExpenseEditScreen(
     expenseId: Long?,
@@ -33,6 +38,9 @@ fun ExpenseEditScreen(
     var isLoading by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
+    
+    // BringIntoViewRequester for Amount field
+    val amountBringIntoViewRequester = remember { BringIntoViewRequester() }
 
     LaunchedEffect(expenseId) {
         if (expenseId != null) {
@@ -66,6 +74,7 @@ fun ExpenseEditScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .navigationBarsPadding()
                 .imePadding()
                 .verticalScroll(scrollState)
                 .padding(16.dp),
@@ -105,7 +114,17 @@ fun ExpenseEditScreen(
                 value = amountRubles,
                 onValueChange = { if (it.all { c -> c.isDigit() || c == '.' || c == ',' }) amountRubles = it },
                 label = { Text("Сумма (рубли) *") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bringIntoViewRequester(amountBringIntoViewRequester)
+                    .onFocusEvent { focusState ->
+                        if (focusState.isFocused) {
+                            scope.launch {
+                                delay(100) // Small delay to ensure keyboard is shown
+                                amountBringIntoViewRequester.bringIntoView()
+                            }
+                        }
+                    },
                 singleLine = true,
                 placeholder = { Text("500") }
             )

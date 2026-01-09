@@ -7,9 +7,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
@@ -39,7 +43,7 @@ import java.time.LocalTime
 import java.time.YearMonth
 import kotlin.math.max
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AppointmentEditScreen(
     appointmentId: Long?,
@@ -248,6 +252,9 @@ fun AppointmentEditScreen(
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
+    
+    // BringIntoViewRequester for Amount field
+    val amountBringIntoViewRequester = remember { BringIntoViewRequester() }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -271,6 +278,7 @@ fun AppointmentEditScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
+                    .navigationBarsPadding()
                     .imePadding()
                     .verticalScroll(scrollState)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -644,7 +652,17 @@ fun AppointmentEditScreen(
                 value = incomeRubles,
                 onValueChange = { if (it.all { c -> c.isDigit() || c == '.' || c == ',' }) incomeRubles = it },
                 label = { Text("Сумма") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bringIntoViewRequester(amountBringIntoViewRequester)
+                    .onFocusEvent { focusState ->
+                        if (focusState.isFocused) {
+                            scope.launch {
+                                kotlinx.coroutines.delay(100) // Small delay to ensure keyboard is shown
+                                amountBringIntoViewRequester.bringIntoView()
+                            }
+                        }
+                    },
                 singleLine = true,
                 placeholder = { Text("1500") },
                 isError = invalidField == AppointmentFieldType.INCOME,

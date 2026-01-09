@@ -152,6 +152,27 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
         endHour: Int,
         endMinute: Int
     ): Boolean {
+        // Проверка диапазона: время должно быть в пределах 9:00-22:00
+        val minHour = 9
+        val maxHour = 22
+        
+        // Проверка начала времени
+        if (startHour < minHour || startHour > maxHour) {
+            return false
+        }
+        if (startHour == maxHour && startMinute > 0) {
+            return false // 22:00 - последняя допустимая точка
+        }
+        
+        // Проверка окончания времени
+        if (endHour < minHour || endHour > maxHour) {
+            return false
+        }
+        if (endHour == maxHour && endMinute > 0) {
+            return false // 22:00 - последняя допустимая точка
+        }
+        
+        // Проверка, что время окончания позже времени начала
         val startTime = LocalTime.of(startHour, startMinute)
         val endTime = LocalTime.of(endHour, endMinute)
         return endTime.isAfter(startTime)
@@ -193,7 +214,19 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
         // Время начала (всегда должно быть выбрано, но проверяем валидность)
         // Время окончания (всегда должно быть выбрано, но проверяем валидность)
         // Валидация диапазона времени
-        if (!validateTimeRange(startHour, startMinute, endHour, endMinute)) {
+        // Проверка диапазона времени: должно быть в пределах 9:00-22:00
+        val minHour = 9
+        val maxHour = 22
+        
+        if (startHour < minHour || startHour > maxHour) {
+            errors["timeRange"] = "Время начала должно быть в пределах 9:00-22:00."
+        } else if (startHour == maxHour && startMinute > 0) {
+            errors["timeRange"] = "Время начала не может быть позже 22:00."
+        } else if (endHour < minHour || endHour > maxHour) {
+            errors["timeRange"] = "Время окончания должно быть в пределах 9:00-22:00."
+        } else if (endHour == maxHour && endMinute > 0) {
+            errors["timeRange"] = "Время окончания не может быть позже 22:00."
+        } else if (!validateTimeRange(startHour, startMinute, endHour, endMinute)) {
             errors["timeRange"] = "Время окончания не может быть раньше времени начала."
         }
         
@@ -305,7 +338,22 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
         // 6. Время окончания (всегда выбрано, так как есть значения по умолчанию)
         // Пропускаем проверку, так как endHour и endMinute всегда имеют значения
         
-        // 7. Валидация диапазона времени
+        // 7. Валидация диапазона времени (9:00-22:00)
+        val minHour = 9
+        val maxHour = 22
+        
+        if (startHour < minHour || startHour > maxHour) {
+            return "Время начала должно быть в пределах 9:00-22:00."
+        }
+        if (startHour == maxHour && startMinute > 0) {
+            return "Время начала не может быть позже 22:00."
+        }
+        if (endHour < minHour || endHour > maxHour) {
+            return "Время окончания должно быть в пределах 9:00-22:00."
+        }
+        if (endHour == maxHour && endMinute > 0) {
+            return "Время окончания не может быть позже 22:00."
+        }
         if (!isTimeRangeValid) {
             return "Время окончания должно быть позже времени начала."
         }

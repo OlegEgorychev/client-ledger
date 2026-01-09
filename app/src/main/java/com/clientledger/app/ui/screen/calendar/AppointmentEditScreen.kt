@@ -77,9 +77,9 @@ fun AppointmentEditScreen(
     var showEndHourMenu by remember { mutableStateOf(false) }
     var showEndMinuteMenu by remember { mutableStateOf(false) }
     
-    // Списки для выбора времени
-    val hours = (0..23).toList()
-    val minutes = (0..59 step 5).toList() // Шаг 5 минут: 00, 05, 10, 15, ..., 55
+    // Списки для выбора времени (ограничение 9:00-22:00)
+    val availableHours = (9..22).toList()
+    val availableMinutes = (0..59 step 5).toList() // Шаг 5 минут: 00, 05, 10, 15, ..., 55
     var incomeRubles by remember { mutableStateOf("") }
     var isPaid by remember { mutableStateOf(true) }
     var isLoading by remember { mutableStateOf(false) }
@@ -98,11 +98,11 @@ fun AppointmentEditScreen(
     LaunchedEffect(date) {
         if (appointmentId == null) {
             selectedDate = date
-            // Устанавливаем время по умолчанию 12:00 для новых записей
-            startHour = 12
+            // Устанавливаем время по умолчанию 12:00 для новых записей (в пределах 9:00-22:00)
+            startHour = 12.coerceIn(9, 22)
             startMinute = 0
-            // Время окончания - на час позже (13:00)
-            endHour = 13
+            // Время окончания - на час позже (13:00, но не позже 22:00)
+            endHour = 13.coerceIn(9, 22)
             endMinute = 0
         }
     }
@@ -257,14 +257,30 @@ fun AppointmentEditScreen(
                     }
                     val dateTime = DateUtils.dateTimeToLocalDateTime(it.startsAt)
                     selectedDate = dateTime.toLocalDate()
-                    startHour = dateTime.hour
+                    // Ограничиваем время начала в пределах 9:00-22:00
+                    val loadedStartHour = dateTime.hour.coerceIn(9, 22)
+                    startHour = loadedStartHour
                     // Округляем минуты до ближайшего значения с шагом 5
-                    startMinute = (dateTime.minute / 5) * 5
+                    // Если час 22, то только 0 минут
+                    val loadedStartMinute = if (loadedStartHour == 22) {
+                        0
+                    } else {
+                        (dateTime.minute / 5) * 5
+                    }
+                    startMinute = loadedStartMinute
                     val duration = it.durationMinutes
                     val endDateTime = dateTime.plusMinutes(duration.toLong())
-                    endHour = endDateTime.hour
+                    // Ограничиваем время окончания в пределах 9:00-22:00
+                    val loadedEndHour = endDateTime.hour.coerceIn(9, 22)
+                    endHour = loadedEndHour
                     // Округляем минуты до ближайшего значения с шагом 5
-                    endMinute = (endDateTime.minute / 5) * 5
+                    // Если час 22, то только 0 минут
+                    val loadedEndMinute = if (loadedEndHour == 22) {
+                        0
+                    } else {
+                        (endDateTime.minute / 5) * 5
+                    }
+                    endMinute = loadedEndMinute
                     incomeRubles = MoneyUtils.centsToRubles(it.incomeCents).toString()
                     isPaid = it.isPaid
                 }
@@ -596,11 +612,15 @@ fun AppointmentEditScreen(
                         expanded = showStartHourMenu,
                         onDismissRequest = { showStartHourMenu = false }
                     ) {
-                        hours.forEach { hour ->
+                        availableHours.forEach { hour ->
                             DropdownMenuItem(
                                 text = { Text(hour.toString().padStart(2, '0')) },
                                 onClick = {
                                     startHour = hour
+                                    // Если выбран час 22, устанавливаем минуты на 0 (22:00 - последняя допустимая точка)
+                                    if (hour == 22 && startMinute > 0) {
+                                        startMinute = 0
+                                    }
                                     showStartHourMenu = false
                                     isLoading = false // Сбрасываем при изменении времени
                                 }
@@ -644,7 +664,13 @@ fun AppointmentEditScreen(
                         expanded = showStartMinuteMenu,
                         onDismissRequest = { showStartMinuteMenu = false }
                     ) {
-                        minutes.forEach { minute ->
+                        // Если выбран час 22, показываем только 0 минут (22:00 - последняя допустимая точка)
+                        val allowedMinutes = if (startHour == 22) {
+                            availableMinutes.filter { it == 0 }
+                        } else {
+                            availableMinutes
+                        }
+                        allowedMinutes.forEach { minute ->
                             DropdownMenuItem(
                                 text = { Text(minute.toString().padStart(2, '0')) },
                                 onClick = {
@@ -699,11 +725,15 @@ fun AppointmentEditScreen(
                         expanded = showEndHourMenu,
                         onDismissRequest = { showEndHourMenu = false }
                     ) {
-                        hours.forEach { hour ->
+                        availableHours.forEach { hour ->
                             DropdownMenuItem(
                                 text = { Text(hour.toString().padStart(2, '0')) },
                                 onClick = {
                                     endHour = hour
+                                    // Если выбран час 22, устанавливаем минуты на 0 (22:00 - последняя допустимая точка)
+                                    if (hour == 22 && endMinute > 0) {
+                                        endMinute = 0
+                                    }
                                     showEndHourMenu = false
                                     isLoading = false // Сбрасываем при изменении времени
                                 }
@@ -747,7 +777,13 @@ fun AppointmentEditScreen(
                         expanded = showEndMinuteMenu,
                         onDismissRequest = { showEndMinuteMenu = false }
                     ) {
-                        minutes.forEach { minute ->
+                        // Если выбран час 22, показываем только 0 минут (22:00 - последняя допустимая точка)
+                        val allowedMinutes = if (endHour == 22) {
+                            availableMinutes.filter { it == 0 }
+                        } else {
+                            availableMinutes
+                        }
+                        allowedMinutes.forEach { minute ->
                             DropdownMenuItem(
                                 text = { Text(minute.toString().padStart(2, '0')) },
                                 onClick = {

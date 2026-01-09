@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import kotlinx.coroutines.delay
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Today
@@ -56,6 +57,7 @@ fun DayScheduleScreen(
     repository: LedgerRepository,
     onBack: () -> Unit,
     onAppointmentClick: (Long) -> Unit,
+    onAddAppointment: () -> Unit,
     onDateChange: ((LocalDate) -> Unit)? = null
 ) {
     // Используем date как источник истины для selectedDate
@@ -206,6 +208,16 @@ fun DayScheduleScreen(
                     // Пользователь может переключиться на другую вкладку
                 }
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onAddAppointment
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Добавить запись"
+                )
+            }
         }
     ) { paddingValues ->
         if (uiState.isLoading) {

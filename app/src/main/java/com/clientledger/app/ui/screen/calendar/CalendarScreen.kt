@@ -2,7 +2,9 @@ package com.clientledger.app.ui.screen.calendar
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -44,6 +46,7 @@ import java.time.YearMonth
 fun CalendarScreen(
     onDateClick: (LocalDate) -> Unit,
     onAddAppointment: () -> Unit,
+    onAddAppointmentForDate: ((LocalDate) -> Unit)? = null,
     onAddExpense: () -> Unit,
     onIncomeDetailClick: ((com.clientledger.app.ui.viewmodel.StatsPeriod, LocalDate, YearMonth, Int) -> Unit)? = null,
     repository: com.clientledger.app.data.repository.LedgerRepository? = null,
@@ -92,6 +95,10 @@ fun CalendarScreen(
                 onDateClick = { date ->
                     viewModel.selectDate(date)
                     onDateClick(date)
+                },
+                onDateLongClick = { date ->
+                    // Long press opens New Appointment screen with pre-selected date
+                    onAddAppointmentForDate?.invoke(date) ?: onAddAppointment()
                 }
             )
             
@@ -174,7 +181,8 @@ fun CalendarGrid(
     month: YearMonth,
     workingDays: Set<String>,
     selectedDate: LocalDate?,
-    onDateClick: (LocalDate) -> Unit
+    onDateClick: (LocalDate) -> Unit,
+    onDateLongClick: (LocalDate) -> Unit
 ) {
     val firstDayOfMonth = month.atDay(1)
     val lastDayOfMonth = month.atEndOfMonth()
@@ -227,6 +235,7 @@ fun CalendarGrid(
                             hasAppointments = hasAppointments,
                             isWeekend = isWeekend,
                             onClick = { onDateClick(date) },
+                            onLongClick = { onDateLongClick(date) },
                             modifier = Modifier.weight(1f)
                         )
                         currentDay++
@@ -240,6 +249,7 @@ fun CalendarGrid(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CalendarDayCell(
     day: Int,
@@ -248,13 +258,17 @@ fun CalendarDayCell(
     hasAppointments: Boolean,
     isWeekend: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
             .aspectRatio(1f)
             .padding(4.dp)
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         // Single clear selection marker: filled circle for selected date.

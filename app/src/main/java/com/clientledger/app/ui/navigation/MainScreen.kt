@@ -22,6 +22,7 @@ import com.clientledger.app.ui.screen.stats.StatsScreen
 import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import com.clientledger.app.ui.viewmodel.StatsViewModel
+import com.clientledger.app.ui.screen.calendar.AppointmentEditScreen
 import java.time.LocalDate
 
 sealed class MainScreenDestination(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
@@ -115,6 +116,9 @@ fun MainScreen(
                         repository = repository,
                         onBack = { /* Не нужен, так как BottomBar всегда виден */ },
                         onAppointmentClick = onAppointmentClick,
+                        onAddAppointment = {
+                            navController.navigate("appointment_edit/null/${localDate.toString()}")
+                        },
                         onDateChange = null // Переключение дней происходит внутри экрана через состояние
                     )
                 }
@@ -134,6 +138,9 @@ fun MainScreen(
                 CalendarScreen(
                     onDateClick = internalOnDateClick,
                     onAddAppointment = onAddAppointment,
+                    onAddAppointmentForDate = { date ->
+                        navController.navigate("appointment_edit/null/${date.toString()}")
+                    },
                     onAddExpense = onAddExpense,
                     onIncomeDetailClick = { period, date, yearMonth, year ->
                         navController.navigate("income_detail/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
@@ -307,6 +314,22 @@ fun MainScreen(
                     onDayClick = internalOnDateClick,
                     onClientClick = onClientClick
                 )
+            }
+            
+            // Appointment Edit Screen
+            composable("appointment_edit/{appointmentId}/{date}") { backStackEntry ->
+                val appointmentId = backStackEntry.arguments?.getString("appointmentId")?.toLongOrNull()
+                val dateStr = backStackEntry.arguments?.getString("date")
+                dateStr?.let { date ->
+                    val localDate = LocalDate.parse(date)
+                    AppointmentEditScreen(
+                        appointmentId = appointmentId,
+                        date = localDate,
+                        repository = repository,
+                        viewModel = viewModel(factory = CalendarViewModelFactory(repository)),
+                        onBack = { navController.popBackStack() }
+                    )
+                }
             }
         }
     }

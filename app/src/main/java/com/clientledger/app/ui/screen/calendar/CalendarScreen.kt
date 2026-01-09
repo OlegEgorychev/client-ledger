@@ -672,6 +672,7 @@ fun StatisticsWidgets(
             title = "Доход сегодня",
             value = MoneyUtils.formatCents(todayIncome),
             onClick = onTodayClick,
+            valueColor = incomeColor(MaterialTheme.colorScheme),
             modifier = Modifier.weight(1f)
         )
         
@@ -680,6 +681,7 @@ fun StatisticsWidgets(
             title = "Доход месяц",
             value = MoneyUtils.formatCents(monthIncome),
             onClick = onMonthClick,
+            valueColor = incomeColor(MaterialTheme.colorScheme),
             modifier = Modifier.weight(1f)
         )
         
@@ -688,6 +690,7 @@ fun StatisticsWidgets(
             title = "Доход год",
             value = MoneyUtils.formatCents(yearIncome),
             onClick = onYearClick,
+            valueColor = incomeColor(MaterialTheme.colorScheme),
             modifier = Modifier.weight(1f)
         )
     }
@@ -889,6 +892,33 @@ enum class ProfitPeriod {
     TODAY, MONTH, YEAR
 }
 
+/**
+ * Helper function to determine color for profit values
+ * @param value Profit value in cents
+ * @param colorScheme Material theme color scheme
+ * @return Color for profit value: green for positive, red for negative, neutral for zero
+ */
+fun profitColor(value: Long, colorScheme: ColorScheme): Color {
+    return when {
+        value > 0 -> {
+            // Use lighter green for dark theme (better contrast), darker green for light theme
+            // Material Green 400 (0xFF66BB6A) works well in both themes with good contrast
+            Color(0xFF66BB6A) // Material Green 400 - optimal for both light and dark themes
+        }
+        value < 0 -> colorScheme.error // Red for negative (theme-aware)
+        else -> colorScheme.onSurface // Neutral for zero (theme-aware)
+    }
+}
+
+/**
+ * Helper function to determine color for income values
+ * @param colorScheme Material theme color scheme (unused but kept for consistency)
+ * @return Green color for income (always positive)
+ */
+fun incomeColor(colorScheme: ColorScheme): Color {
+    return Color(0xFF66BB6A) // Material Green 400 - same as positive profit
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpandableProfitWidget(
@@ -902,11 +932,7 @@ fun ExpandableProfitWidget(
     onIncomeClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val profitColor = when {
-        profit > 0 -> MaterialTheme.colorScheme.primary
-        profit < 0 -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.onSurface
-    }
+    val profitColorValue = profitColor(profit, MaterialTheme.colorScheme)
     
     Card(
         modifier = modifier
@@ -942,7 +968,7 @@ fun ExpandableProfitWidget(
                 text = MoneyUtils.formatCentsSigned(profit),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = profitColor
+                color = profitColorValue
             )
             
             // Expanded content (income/expense details)
@@ -977,7 +1003,7 @@ fun ExpandableProfitWidget(
                             text = MoneyUtils.formatCents(income),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = incomeColor(MaterialTheme.colorScheme),
                             modifier = Modifier.clickable(onClick = onIncomeClick)
                         )
                     }
@@ -1170,11 +1196,7 @@ fun NetProfitWidgets(
             title = "Прибыль сегодня",
             value = MoneyUtils.formatCentsSigned(todayNet),
             onClick = { },
-            valueColor = when {
-                todayNet > 0 -> MaterialTheme.colorScheme.primary
-                todayNet < 0 -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.onSurface
-            },
+            valueColor = profitColor(todayNet, MaterialTheme.colorScheme),
             modifier = Modifier.weight(1f)
         )
         
@@ -1183,11 +1205,7 @@ fun NetProfitWidgets(
             title = "Прибыль месяц",
             value = MoneyUtils.formatCentsSigned(monthNet),
             onClick = { },
-            valueColor = when {
-                monthNet > 0 -> MaterialTheme.colorScheme.primary
-                monthNet < 0 -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.onSurface
-            },
+            valueColor = profitColor(monthNet, MaterialTheme.colorScheme),
             modifier = Modifier.weight(1f)
         )
         
@@ -1196,11 +1214,7 @@ fun NetProfitWidgets(
             title = "Прибыль год",
             value = MoneyUtils.formatCentsSigned(yearNet),
             onClick = { },
-            valueColor = when {
-                yearNet > 0 -> MaterialTheme.colorScheme.primary
-                yearNet < 0 -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.onSurface
-            },
+            valueColor = profitColor(yearNet, MaterialTheme.colorScheme),
             modifier = Modifier.weight(1f)
         )
     }

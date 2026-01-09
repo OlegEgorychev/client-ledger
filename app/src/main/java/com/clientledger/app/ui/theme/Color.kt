@@ -25,12 +25,20 @@ val DarkBackground = Color(0xFF0A0E27)  // Near-black blue
 val DarkSurface = Color(0xFF121629)     // Dark surface
 val DarkSurfaceVariant = Color(0xFF1A1F3A) // Dark surface variant
 
-// Background - Light theme (2025 style: high contrast, modern)
-val LightBackground = Color(0xFFF8F9FA)  // Near-white with slight tint for contrast
-val LightSurface = Color(0xFFFFFFFF)      // Pure white for cards (maximum contrast)
+// Background - Light theme (Soft Indigo Finance palette)
+val LightBackground = Color(0xFFF6F7FB)  // Soft indigo-tinted background
+val LightSurface = Color(0xFFFFFFFF)      // Pure white for cards and surfaces
 val LightSurfaceVariant = Color(0xFFF1F3F5) // Slightly darker gray for better separation
-val LightOutline = Color(0xFFCED4DA)     // More visible outline (higher contrast)
-val LightOutlineVariant = Color(0xFFDEE2E6) // More visible outline variant
+val LightOutline = Color(0xFFE5E7EB)     // Soft outline color
+val LightOutlineVariant = Color(0xFFE5E7EB) // Outline variant
+
+// Soft Indigo Finance palette colors
+val SoftIndigoPrimary = Color(0xFF4F5DFF)      // Main accent color
+val SoftIndigoSecondary = Color(0xFF6B7280)    // Secondary UI elements
+val SoftIndigoSuccess = Color(0xFF22C55E)      // Success/positive states
+val SoftIndigoError = Color(0xFFEF4444)        // Error/destructive actions
+val SoftIndigoTextPrimary = Color(0xFF111827)  // Main text
+val SoftIndigoTextSecondary = Color(0xFF4B5563) // Secondary text
 
 // Legacy colors (kept for compatibility, can be removed later)
 val Purple80 = Color(0xFFD0BCFF)

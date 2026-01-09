@@ -155,7 +155,7 @@ fun StatsScreen(
                         title = "Доход",
                         value = MoneyUtils.formatCents(uiState.income),
                         subtitle = "Средний чек: ${MoneyUtils.formatCents(uiState.averageCheck)}",
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurface,
                         onClick = {
                             onIncomeClick(
                                 uiState.period,
@@ -218,7 +218,7 @@ fun StatsScreen(
                     StatsCard(
                         title = "Прибыль",
                         value = MoneyUtils.formatCents(uiState.profit),
-                        color = if (uiState.profit >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        color = if (uiState.profit >= 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
                     )
 
                     StatsCard(
@@ -275,7 +275,11 @@ fun StatsCard(
     subtitle: String? = null
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
@@ -319,8 +323,9 @@ fun ClickableStatsCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        )
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
@@ -349,7 +354,7 @@ fun ClickableStatsCard(
             // Comparison delta
             comparison?.let { comp ->
                 val deltaColor = if (comp.delta >= 0) {
-                    MaterialTheme.colorScheme.primary
+                    MaterialTheme.colorScheme.tertiary
                 } else {
                     MaterialTheme.colorScheme.error
                 }

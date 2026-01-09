@@ -87,20 +87,30 @@ fun CalendarScreen(
                 onNextMonth = { viewModel.changeMonth(1) }
             )
 
-            // Календарная сетка
-            CalendarGrid(
-                month = uiState.currentMonth,
-                workingDays = uiState.workingDays,
-                selectedDate = uiState.selectedDate,
-                onDateClick = { date ->
-                    viewModel.selectDate(date)
-                    onDateClick(date)
-                },
-                onDateLongClick = { date ->
-                    // Long press opens New Appointment screen with pre-selected date
-                    onAddAppointmentForDate?.invoke(date) ?: onAddAppointment()
-                }
-            )
+            // Календарная сетка в Card для лучшей читаемости
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                CalendarGrid(
+                    month = uiState.currentMonth,
+                    workingDays = uiState.workingDays,
+                    selectedDate = uiState.selectedDate,
+                    onDateClick = { date ->
+                        viewModel.selectDate(date)
+                        onDateClick(date)
+                    },
+                    onDateLongClick = { date ->
+                        // Long press opens New Appointment screen with pre-selected date
+                        onAddAppointmentForDate?.invoke(date) ?: onAddAppointment()
+                    }
+                )
+            }
             
             // Statistics widgets at the bottom
             Spacer(modifier = Modifier.height(16.dp))
@@ -158,19 +168,20 @@ fun MonthHeader(
             Icon(
                 Icons.Default.ArrowBack,
                 contentDescription = "Предыдущий месяц",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = MaterialTheme.colorScheme.onSurface
             )
         }
         Text(
             text = DateUtils.formatMonth(month),
             style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
         )
         IconButton(onClick = onNextMonth) {
             Icon(
                 Icons.Default.ArrowForward,
                 contentDescription = "Следующий месяц",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = MaterialTheme.colorScheme.onSurface
             )
         }
     }
@@ -190,7 +201,9 @@ fun CalendarGrid(
     val daysInMonth = month.lengthOfMonth()
 
     Column(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
     ) {
         // Заголовки дней недели
         Row(
@@ -204,7 +217,7 @@ fun CalendarGrid(
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -442,12 +455,9 @@ fun AppointmentCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (isCanceled) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        )
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
@@ -491,7 +501,7 @@ fun AppointmentCard(
                     text = MoneyUtils.formatCents(appointment.incomeCents),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 if (appointment.isPaid) {
                     Badge {
@@ -511,7 +521,11 @@ fun ExpenseCard(
 ) {
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
@@ -614,8 +628,9 @@ fun StatisticsWidget(
         modifier = modifier
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        )
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier

@@ -100,7 +100,7 @@ fun DayScheduleScreen(
                                     text = "Сегодня, ${DateUtils.formatShortDate(selectedDate)}",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.align(Alignment.Center)
                                 )
                                 
@@ -724,7 +724,7 @@ fun AppointmentCardOnTimeline(
                         text = MoneyUtils.formatCents(appointment.incomeCents),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }

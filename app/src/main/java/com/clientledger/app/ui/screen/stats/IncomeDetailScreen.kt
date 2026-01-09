@@ -96,7 +96,11 @@ fun IncomeDetailScreen(
             ) {
                 // Total Income - Big number with comparison
                 Card(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -114,7 +118,7 @@ fun IncomeDetailScreen(
                             text = MoneyUtils.formatCents(uiState.totalIncome),
                             style = MaterialTheme.typography.displayLarge,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         // Comparison to previous period
                         uiState.incomeComparison?.let { comp ->
@@ -498,7 +502,7 @@ fun IncomeDonutChart(
                     text = MoneyUtils.formatCents(totalIncome),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "Нет данных",
@@ -521,19 +525,20 @@ fun IncomeDonutChart(
         entryModelOf(entries)
     }
     
-    // Generate colors for segments - use fixed colors to avoid composable in remember
-    val colors = remember(data.size) {
+    // Generate colors for segments - use theme colors
+    val colorScheme = MaterialTheme.colorScheme
+    val colors = remember(data.size, colorScheme) {
         val colorList = mutableListOf<Color>()
-        // Use fixed color values that will be styled by MaterialTheme
+        // Use theme colors for consistent styling
         val baseColors = listOf(
-            Color(0xFF6750A4), // primary
-            Color(0xFF625B71), // secondary
-            Color(0xFF7D5260), // tertiary
-            Color(0xFFEADDFF), // primaryContainer
-            Color(0xFFE8DEF8), // secondaryContainer
-            Color(0xFFFFD8E4), // tertiaryContainer
-            Color(0xFFBA1A1A), // error
-            Color(0xFFFFDAD6)  // errorContainer
+            colorScheme.primary,
+            colorScheme.secondary,
+            colorScheme.tertiary,
+            colorScheme.primaryContainer,
+            colorScheme.secondaryContainer,
+            colorScheme.tertiaryContainer,
+            colorScheme.error,
+            colorScheme.errorContainer
         )
         repeat(data.size) { index ->
             colorList.add(baseColors[index % baseColors.size])
@@ -605,10 +610,12 @@ fun InsightCard(
     title: String,
     value: String
 ) {
-    Surface(
+    Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier

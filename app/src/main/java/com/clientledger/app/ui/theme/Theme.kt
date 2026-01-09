@@ -45,35 +45,35 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Indigo,
+    primary = SoftIndigoPrimary, // #4F5DFF - main accent
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFE3E7F1), // Slightly more visible indigo tint
-    onPrimaryContainer = Color(0xFF1A237E), // Darker indigo for better contrast
+    primaryContainer = Color(0xFFE8EAFF), // Light indigo tint for containers
+    onPrimaryContainer = SoftIndigoPrimary, // Primary color for text on container
     
-    secondary = CoolBlue,
+    secondary = SoftIndigoSecondary, // #6B7280 - secondary UI elements
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFD6EDF5), // More visible cyan tint
-    onSecondaryContainer = Color(0xFF01579B), // Darker blue for better contrast
+    secondaryContainer = Color(0xFFF3F4F6), // Light gray tint
+    onSecondaryContainer = SoftIndigoTextSecondary, // Secondary text color
     
-    tertiary = SoftGreen,
+    tertiary = SoftIndigoSuccess, // #22C55E - success/positive states
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFE1F5E1), // More visible green tint
-    onTertiaryContainer = Color(0xFF2E7D32), // Darker green for better contrast
+    tertiaryContainer = Color(0xFFD1FAE5), // Light green tint
+    onTertiaryContainer = Color(0xFF15803D), // Darker green for contrast
     
-    error = MutedRed,
+    error = SoftIndigoError, // #EF4444 - error/destructive actions
     onError = Color.White,
-    errorContainer = Color(0xFFFFE5E5), // More visible red tint
-    onErrorContainer = Color(0xFFB71C1C), // Darker red for better contrast
+    errorContainer = Color(0xFFFEE2E2), // Light red tint
+    onErrorContainer = Color(0xFF991B1B), // Darker red for contrast
     
-    background = LightBackground,
-    onBackground = Color(0xFF0D0D0D), // Very dark, almost black (high contrast, modern 2025)
-    surface = LightSurface,
-    onSurface = Color(0xFF0D0D0D), // Very dark for maximum readability
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = Color(0xFF495057), // Darker gray for better secondary text contrast
+    background = LightBackground, // #F6F7FB - soft indigo-tinted background
+    onBackground = SoftIndigoTextPrimary, // #111827 - main text
+    surface = LightSurface, // #FFFFFF - white for cards
+    onSurface = SoftIndigoTextPrimary, // #111827 - main text on surface
+    surfaceVariant = LightSurfaceVariant, // Slightly darker for separation
+    onSurfaceVariant = SoftIndigoTextSecondary, // #4B5563 - secondary text
     
-    outline = LightOutline,
-    outlineVariant = LightOutlineVariant
+    outline = LightOutline, // #E5E7EB - soft outline
+    outlineVariant = LightOutlineVariant // #E5E7EB - outline variant
 )
 
 @Composable

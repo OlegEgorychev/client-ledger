@@ -58,6 +58,7 @@ fun DayScheduleScreen(
     onBack: () -> Unit,
     onAppointmentClick: (Long) -> Unit,
     onAddAppointment: () -> Unit,
+    onAddExpense: () -> Unit,
     onDateChange: ((LocalDate) -> Unit)? = null
 ) {
     // Используем date как источник истины для selectedDate
@@ -210,12 +211,22 @@ fun DayScheduleScreen(
             )
         },
         floatingActionButton = {
+            var showAddChooser by remember { mutableStateOf(false) }
+            
             FloatingActionButton(
-                onClick = onAddAppointment
+                onClick = { showAddChooser = true }
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = "Добавить запись"
+                    contentDescription = "Добавить"
+                )
+            }
+            
+            if (showAddChooser) {
+                AddChooserDialog(
+                    onDismiss = { showAddChooser = false },
+                    onAddAppointment = onAddAppointment,
+                    onAddExpense = onAddExpense
                 )
             }
         }

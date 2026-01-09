@@ -7,6 +7,7 @@ import com.clientledger.app.data.dao.ClientIncome
 import com.clientledger.app.data.dao.DayIncome
 import com.clientledger.app.data.dao.DayProfit
 import com.clientledger.app.data.dao.ExpenseDao
+import com.clientledger.app.data.dao.ExpenseItemDao
 import com.clientledger.app.data.dao.ServiceTagDao
 import com.clientledger.app.data.dao.SummaryStats
 import com.clientledger.app.data.dao.TagIncome
@@ -14,6 +15,8 @@ import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.AppointmentServiceEntity
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.entity.ExpenseEntity
+import com.clientledger.app.data.entity.ExpenseItemEntity
+import com.clientledger.app.data.entity.ExpenseTag
 import com.clientledger.app.data.entity.ServiceTagEntity
 import com.clientledger.app.data.testdata.TestDataGenerator
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +25,7 @@ class LedgerRepository(
     private val clientDao: ClientDao,
     private val appointmentDao: AppointmentDao,
     private val expenseDao: ExpenseDao,
+    private val expenseItemDao: ExpenseItemDao,
     private val serviceTagDao: ServiceTagDao,
     private val appointmentServiceDao: AppointmentServiceDao
 ) {
@@ -86,11 +90,35 @@ class LedgerRepository(
     
     suspend fun getExpenseById(id: Long): ExpenseEntity? = expenseDao.getExpenseById(id)
     
+    suspend fun getExpenseItems(expenseId: Long): List<ExpenseItemEntity> =
+        expenseItemDao.getItemsForExpense(expenseId)
+    
     suspend fun insertExpense(expense: ExpenseEntity): Long = expenseDao.insertExpense(expense)
     
     suspend fun updateExpense(expense: ExpenseEntity) = expenseDao.updateExpense(expense)
     
-    suspend fun deleteExpense(expense: ExpenseEntity) = expenseDao.deleteExpense(expense)
+    suspend fun deleteExpense(expense: ExpenseEntity) {
+        expenseItemDao.deleteItemsForExpense(expense.id)
+        expenseDao.deleteExpense(expense)
+    }
+    
+    suspend fun saveExpenseWithItems(
+        expense: ExpenseEntity,
+        items: List<ExpenseItemEntity>
+    ): Long {
+        val expenseId = if (expense.id == 0L) {
+            expenseDao.insertExpense(expense)
+        } else {
+            expenseItemDao.deleteItemsForExpense(expense.id)
+            expenseDao.updateExpense(expense)
+            expense.id
+        }
+        
+        val itemsWithExpenseId = items.map { it.copy(expenseId = expenseId) }
+        expenseItemDao.insertExpenseItems(itemsWithExpenseId)
+        
+        return expenseId
+    }
 
     // Statistics
     suspend fun getIncomeForDateRange(startDate: String, endDate: String): Long =

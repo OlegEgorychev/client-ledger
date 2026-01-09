@@ -6,57 +6,89 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material3.*
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.onFocusEvent
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.window.Dialog
 import com.clientledger.app.data.entity.ExpenseEntity
+import com.clientledger.app.data.entity.ExpenseItemEntity
+import com.clientledger.app.data.entity.ExpenseTag
 import com.clientledger.app.data.repository.LedgerRepository
-import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.util.*
 import com.clientledger.app.util.MoneyUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.time.LocalTime
+import java.time.YearMonth
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun ExpenseEditScreen(
     expenseId: Long?,
     date: LocalDate,
     repository: LedgerRepository,
-    viewModel: CalendarViewModel,
     onBack: () -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var hour by remember { mutableStateOf(12) }
-    var minute by remember { mutableStateOf(0) }
-    var amountRubles by remember { mutableStateOf("") }
+    var selectedDate by remember { mutableStateOf(date) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var selectedTags by remember { mutableStateOf<Set<ExpenseTag>>(emptySet()) }
+    var tagAmounts by remember { mutableStateOf<Map<ExpenseTag, String>>(emptyMap()) }
+    var note by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
-
-    val scope = rememberCoroutineScope()
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     
-    // BringIntoViewRequester for Amount field
+    val scope = rememberCoroutineScope()
+    val allTags = ExpenseTag.values().toList()
+    
+    // BringIntoViewRequester for amount fields
     val amountBringIntoViewRequester = remember { BringIntoViewRequester() }
-
+    
+    // Load existing expense if editing
     LaunchedEffect(expenseId) {
         if (expenseId != null) {
             scope.launch {
                 val expense = repository.getExpenseById(expenseId)
                 expense?.let {
-                    title = it.title
-                    val dateTime = DateUtils.dateTimeToLocalDateTime(it.spentAt)
-                    hour = dateTime.hour
-                    minute = dateTime.minute
-                    amountRubles = MoneyUtils.centsToRubles(it.amountCents).toString()
+                    selectedDate = LocalDate.parse(it.dateKey)
+                    note = it.note ?: ""
+                    
+                    val items = repository.getExpenseItems(expenseId)
+                    selectedTags = items.map { item -> item.tag }.toSet()
+                    tagAmounts = items.associate { item ->
+                        item.tag to MoneyUtils.centsToRubles(item.amountCents).toString()
+                    }
                 }
             }
         }
     }
-
+    
+    // Calculate total
+    val totalCents = selectedTags.sumOf { tag ->
+        val amountText = tagAmounts[tag] ?: "0"
+        MoneyUtils.rublesToCents(amountText.replace(',', '.').toDoubleOrNull() ?: 0.0)
+    }
+    
+    // Validation
+    val isFormValid = remember(selectedDate, selectedTags, tagAmounts) {
+        selectedTags.isNotEmpty() && 
+        selectedTags.all { tag ->
+            val amountText = tagAmounts[tag] ?: ""
+            val amount = amountText.replace(',', '.').toDoubleOrNull() ?: 0.0
+            amount > 0
+        }
+    }
+    
     Scaffold(
         topBar = {
             TopAppBar(
@@ -77,113 +109,244 @@ fun ExpenseEditScreen(
                 .navigationBarsPadding()
                 .imePadding()
                 .verticalScroll(scrollState)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Date picker
+            Text("Дата расхода *", style = MaterialTheme.typography.labelSmall)
             OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("Название *") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("Такси") }
-            )
-
-            // Время
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = hour.toString().padStart(2, '0'),
-                    onValueChange = { it.toIntOrNull()?.let { h -> if (h in 0..23) hour = h } },
-                    label = { Text("Часы") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = minute.toString().padStart(2, '0'),
-                    onValueChange = { it.toIntOrNull()?.let { m -> if (m in 0..59) minute = m } },
-                    label = { Text("Минуты") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
-            }
-
-            OutlinedTextField(
-                value = amountRubles,
-                onValueChange = { if (it.all { c -> c.isDigit() || c == '.' || c == ',' }) amountRubles = it },
-                label = { Text("Сумма (рубли) *") },
+                value = DateUtils.formatDate(selectedDate),
+                onValueChange = { },
+                readOnly = true,
+                label = { Text("Дата") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .bringIntoViewRequester(amountBringIntoViewRequester)
-                    .onFocusEvent { focusState ->
-                        if (focusState.isFocused) {
-                            scope.launch {
-                                delay(100) // Small delay to ensure keyboard is shown
-                                amountBringIntoViewRequester.bringIntoView()
-                            }
-                        }
-                    },
-                singleLine = true,
-                placeholder = { Text("500") }
+                    .clickable { showDatePicker = true },
+                trailingIcon = {
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarToday,
+                            contentDescription = "Выбрать дату"
+                        )
+                    }
+                }
             )
-
-            // Bottom padding to ensure Save button is always reachable
+            
+            if (showDatePicker) {
+                DatePickerDialog(
+                    initialDate = selectedDate,
+                    onDateSelected = { newDate ->
+                        selectedDate = newDate
+                        showDatePicker = false
+                    },
+                    onDismiss = { showDatePicker = false }
+                )
+            }
+            
+            // Tag selection
+            Text("Теги расхода *", style = MaterialTheme.typography.labelSmall)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                allTags.forEach { tag ->
+                    FilterChip(
+                        selected = selectedTags.contains(tag),
+                        onClick = {
+                            selectedTags = if (selectedTags.contains(tag)) {
+                                selectedTags - tag
+                            } else {
+                                selectedTags + tag
+                            }
+                            // Remove amount when tag is deselected
+                            if (!selectedTags.contains(tag)) {
+                                tagAmounts = tagAmounts - tag
+                            }
+                        },
+                        label = { Text(tag.displayName) }
+                    )
+                }
+            }
+            
+            if (selectedTags.isEmpty()) {
+                Text(
+                    text = "Выберите хотя бы один тег",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            
+            // Per-tag amounts
+            if (selectedTags.isNotEmpty()) {
+                Text("Суммы по тегам *", style = MaterialTheme.typography.labelSmall)
+                selectedTags.forEach { tag ->
+                    val currentAmount = tagAmounts[tag] ?: ""
+                    var amountText by remember(tag) { mutableStateOf(currentAmount) }
+                    
+                    // Sync with state
+                    LaunchedEffect(tag) {
+                        amountText = tagAmounts[tag] ?: ""
+                    }
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = tag.displayName,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        OutlinedTextField(
+                            value = amountText,
+                            onValueChange = { newValue ->
+                                if (newValue.all { c -> c.isDigit() || c == '.' || c == ',' }) {
+                                    amountText = newValue
+                                    tagAmounts = tagAmounts + (tag to newValue)
+                                }
+                            },
+                            label = { Text("Сумма") },
+                            modifier = Modifier
+                                .width(120.dp)
+                                .bringIntoViewRequester(amountBringIntoViewRequester)
+                                .onFocusEvent { focusState ->
+                                    if (focusState.isFocused) {
+                                        scope.launch {
+                                            delay(100)
+                                            amountBringIntoViewRequester.bringIntoView()
+                                        }
+                                    }
+                                },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            placeholder = { Text("0") },
+                            isError = amountText.isNotBlank() && 
+                                (amountText.replace(',', '.').toDoubleOrNull() ?: 0.0) <= 0
+                        )
+                    }
+                }
+                
+                // Total
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Итого",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = MoneyUtils.formatCents(totalCents),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            
+            // Note (optional)
+            Text("Примечание", style = MaterialTheme.typography.labelSmall)
+            OutlinedTextField(
+                value = note,
+                onValueChange = { note = it },
+                label = { Text("Комментарий") },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 3,
+                placeholder = { Text("Необязательное примечание") }
+            )
+            
+            // Error message
+            errorMessage?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            
             Spacer(modifier = Modifier.height(8.dp))
-
+            
+            // Save button
             Button(
                 onClick = {
-                    if (title.isBlank() || amountRubles.isBlank()) {
+                    if (!isFormValid) {
+                        errorMessage = "Заполните все обязательные поля"
                         return@Button
                     }
-
+                    
                     scope.launch {
                         isLoading = true
-                        val amountCents = MoneyUtils.rublesToCents(amountRubles.replace(',', '.').toDoubleOrNull() ?: 0.0)
-                        val spentAt = date.atTime(LocalTime.of(hour, minute)).toMillis()
+                        errorMessage = null
                         
-                        val expense = if (expenseId == null) {
-                            ExpenseEntity(
-                                title = title,
-                                spentAt = spentAt,
-                                dateKey = date.toDateKey(),
-                                amountCents = amountCents,
-                                createdAt = System.currentTimeMillis()
-                            )
-                        } else {
-                            ExpenseEntity(
-                                id = expenseId,
-                                title = title,
-                                spentAt = spentAt,
-                                dateKey = date.toDateKey(),
-                                amountCents = amountCents,
-                                createdAt = System.currentTimeMillis()
-                            )
+                        try {
+                            val spentAt = selectedDate.atStartOfDay().toMillis()
+                            val expense = if (expenseId == null) {
+                                ExpenseEntity(
+                                    spentAt = spentAt,
+                                    dateKey = selectedDate.toDateKey(),
+                                    totalAmountCents = totalCents,
+                                    note = note.takeIf { it.isNotBlank() },
+                                    createdAt = System.currentTimeMillis()
+                                )
+                            } else {
+                                ExpenseEntity(
+                                    id = expenseId,
+                                    spentAt = spentAt,
+                                    dateKey = selectedDate.toDateKey(),
+                                    totalAmountCents = totalCents,
+                                    note = note.takeIf { it.isNotBlank() },
+                                    createdAt = System.currentTimeMillis()
+                                )
+                            }
+                            
+                            val items = selectedTags.map { tag ->
+                                val amountText = tagAmounts[tag] ?: "0"
+                                val amountCents = MoneyUtils.rublesToCents(
+                                    amountText.replace(',', '.').toDoubleOrNull() ?: 0.0
+                                )
+                                ExpenseItemEntity(
+                                    expenseId = expenseId ?: 0L,
+                                    tag = tag,
+                                    amountCents = amountCents
+                                )
+                            }
+                            
+                            repository.saveExpenseWithItems(expense, items)
+                            onBack()
+                        } catch (e: Exception) {
+                            errorMessage = "Ошибка сохранения: ${e.message}"
+                        } finally {
+                            isLoading = false
                         }
-
-                        if (expenseId == null) {
-                            viewModel.insertExpense(expense)
-                        } else {
-                            viewModel.updateExpense(expense)
-                        }
-                        onBack()
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !isLoading
+                enabled = !isLoading && isFormValid
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text("Сохранение…")
+                    }
                 } else {
                     Text("Сохранить")
                 }
             }
             
-            // Extra bottom padding for better accessibility with large font scales
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
-
-

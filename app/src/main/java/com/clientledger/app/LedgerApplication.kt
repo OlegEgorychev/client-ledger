@@ -11,6 +11,7 @@ class LedgerApplication : Application() {
             database.clientDao(),
             database.appointmentDao(),
             database.expenseDao(),
+            database.expenseItemDao(),
             database.serviceTagDao(),
             database.appointmentServiceDao()
         )

@@ -3,9 +3,12 @@ package com.clientledger.app.data.database
 import com.clientledger.app.data.dao.AppointmentDao
 import com.clientledger.app.data.dao.ClientDao
 import com.clientledger.app.data.dao.ExpenseDao
+import com.clientledger.app.data.dao.ExpenseItemDao
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.entity.ExpenseEntity
+import com.clientledger.app.data.entity.ExpenseItemEntity
+import com.clientledger.app.data.entity.ExpenseTag
 import com.clientledger.app.util.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -15,7 +18,8 @@ import java.time.LocalTime
 suspend fun insertDemoData(
     clientDao: ClientDao,
     appointmentDao: AppointmentDao,
-    expenseDao: ExpenseDao
+    expenseDao: ExpenseDao,
+    expenseItemDao: ExpenseItemDao
 ) = withContext(Dispatchers.IO) {
     // Проверяем, есть ли уже данные (простая проверка через count)
     val existingClient = clientDao.getClientByPhone("+79001234567")
@@ -97,23 +101,37 @@ suspend fun insertDemoData(
     )
     
     // Создаём демо-расходы
-    expenseDao.insertExpense(
+    val expense1Id = expenseDao.insertExpense(
         ExpenseEntity(
-            title = "Такси",
             spentAt = date1.atTime(LocalTime.of(8, 30)).toMillis(),
             dateKey = date1.toDateKey(),
-            amountCents = 50000, // 500 ₽
+            totalAmountCents = 50000, // 500 ₽
+            note = "Такси",
             createdAt = now
         )
     )
+    expenseItemDao.insertExpenseItem(
+        ExpenseItemEntity(
+            expenseId = expense1Id,
+            tag = ExpenseTag.TAXI,
+            amountCents = 50000
+        )
+    )
     
-    expenseDao.insertExpense(
+    val expense2Id = expenseDao.insertExpense(
         ExpenseEntity(
-            title = "Материалы",
             spentAt = date1.atTime(LocalTime.of(9, 0)).toMillis(),
             dateKey = date1.toDateKey(),
-            amountCents = 200000, // 2000 ₽
+            totalAmountCents = 200000, // 2000 ₽
+            note = "Материалы",
             createdAt = now
+        )
+    )
+    expenseItemDao.insertExpenseItem(
+        ExpenseItemEntity(
+            expenseId = expense2Id,
+            tag = ExpenseTag.SUPPLIES,
+            amountCents = 200000
         )
     )
 }

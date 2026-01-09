@@ -219,7 +219,7 @@ fun AppNavigation(
             val dateStr = backStackEntry.arguments?.getString("date")
             dateStr?.let { date ->
                 val localDate = LocalDate.parse(date)
-                ExpenseEditScreenWrapper(
+                ExpenseEditScreen(
                     expenseId = expenseId,
                     date = localDate,
                     repository = repository,
@@ -230,7 +230,7 @@ fun AppNavigation(
 
         composable("expense_edit/{expenseId}") { backStackEntry ->
             val expenseId = backStackEntry.arguments?.getString("expenseId")?.toLongOrNull()
-            ExpenseEditScreenWrapper(
+            ExpenseEditScreen(
                 expenseId = expenseId,
                 date = LocalDate.now(),
                 repository = repository,
@@ -260,6 +260,7 @@ fun DayDetailScreenWrapper(
     }
 
     DayDetailScreen(
+        repository = repository,
         date = date,
         appointments = uiState.dayAppointments,
         expenses = uiState.dayExpenses,
@@ -293,24 +294,4 @@ fun AppointmentEditScreenWrapper(
         onBack = onBack
     )
 }
-
-@Composable
-fun ExpenseEditScreenWrapper(
-    expenseId: Long?,
-    date: LocalDate,
-    repository: LedgerRepository,
-    onBack: () -> Unit,
-    viewModel: CalendarViewModel = viewModel(
-        factory = com.clientledger.app.ui.navigation.CalendarViewModelFactory(repository)
-    )
-) {
-    ExpenseEditScreen(
-        expenseId = expenseId,
-        date = date,
-        repository = repository,
-        viewModel = viewModel,
-        onBack = onBack
-    )
-}
-
 

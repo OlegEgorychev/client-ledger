@@ -23,7 +23,7 @@ interface ExpenseDao {
 
     @Query(
         """
-        SELECT COALESCE(SUM(amountCents), 0) FROM expenses 
+        SELECT COALESCE(SUM(totalAmountCents), 0) FROM expenses 
         WHERE dateKey >= :startDate AND dateKey <= :endDate
         """
     )

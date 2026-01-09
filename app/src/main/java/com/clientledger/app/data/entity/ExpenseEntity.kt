@@ -11,10 +11,10 @@ import androidx.room.PrimaryKey
 data class ExpenseEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
-    val title: String,
     val spentAt: Long, // timestamp millis
     val dateKey: String, // ISO "YYYY-MM-DD"
-    val amountCents: Long, // >= 0
+    val totalAmountCents: Long, // >= 0, sum of all items
+    val note: String? = null, // optional note
     val createdAt: Long
 )
 

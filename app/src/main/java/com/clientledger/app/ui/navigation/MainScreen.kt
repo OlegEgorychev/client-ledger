@@ -23,6 +23,7 @@ import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import com.clientledger.app.ui.viewmodel.StatsViewModel
 import com.clientledger.app.ui.screen.calendar.AppointmentEditScreen
+import com.clientledger.app.ui.screen.calendar.ExpenseEditScreen
 import java.time.LocalDate
 
 sealed class MainScreenDestination(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
@@ -118,6 +119,9 @@ fun MainScreen(
                         onAppointmentClick = onAppointmentClick,
                         onAddAppointment = {
                             navController.navigate("appointment_edit/null/${localDate.toString()}")
+                        },
+                        onAddExpense = {
+                            navController.navigate("expense_edit/null/${localDate.toString()}")
                         },
                         onDateChange = null // Переключение дней происходит внутри экрана через состояние
                     )
@@ -327,6 +331,21 @@ fun MainScreen(
                         date = localDate,
                         repository = repository,
                         viewModel = viewModel(factory = CalendarViewModelFactory(repository)),
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            
+            // Expense Edit Screen
+            composable("expense_edit/{expenseId}/{date}") { backStackEntry ->
+                val expenseId = backStackEntry.arguments?.getString("expenseId")?.toLongOrNull()
+                val dateStr = backStackEntry.arguments?.getString("date")
+                dateStr?.let { date ->
+                    val localDate = LocalDate.parse(date)
+                    ExpenseEditScreen(
+                        expenseId = expenseId,
+                        date = localDate,
+                        repository = repository,
                         onBack = { navController.popBackStack() }
                     )
                 }

@@ -65,8 +65,18 @@ fun CalendarScreen(
             TopAppBar(title = { Text("Календарь") })
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddAppointment) {
+            var showAddChooser by remember { mutableStateOf(false) }
+            
+            FloatingActionButton(onClick = { showAddChooser = true }) {
                 Icon(Icons.Default.Add, contentDescription = "Добавить")
+            }
+            
+            if (showAddChooser) {
+                AddChooserDialog(
+                    onDismiss = { showAddChooser = false },
+                    onAddAppointment = onAddAppointment,
+                    onAddExpense = onAddExpense
+                )
             }
         }
     ) { paddingValues ->
@@ -361,6 +371,7 @@ fun DayDetailScreen(
     date: LocalDate,
     appointments: List<AppointmentEntity>,
     expenses: List<ExpenseEntity>,
+    repository: LedgerRepository,
     onBack: () -> Unit,
     onAddAppointment: () -> Unit,
     onAddExpense: () -> Unit,
@@ -444,6 +455,7 @@ fun DayDetailScreen(
                 expenses.forEach { expense ->
                     ExpenseCard(
                         expense = expense,
+                        repository = repository,
                         onClick = { onExpenseClick(expense) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -527,8 +539,15 @@ fun AppointmentCard(
 @Composable
 fun ExpenseCard(
     expense: ExpenseEntity,
+    repository: LedgerRepository,
     onClick: () -> Unit
 ) {
+    var expenseItems by remember { mutableStateOf<List<com.clientledger.app.data.entity.ExpenseItemEntity>>(emptyList()) }
+    
+    LaunchedEffect(expense.id) {
+        expenseItems = repository.getExpenseItems(expense.id)
+    }
+    
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -537,31 +556,51 @@ fun ExpenseCard(
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    if (expenseItems.isNotEmpty()) {
+                        Text(
+                            text = expenseItems.joinToString(", ") { it.tag.displayName },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        Text(
+                            text = "Расход",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = DateUtils.formatDate(LocalDate.parse(expense.dateKey)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    text = expense.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = DateUtils.formatDateTime(DateUtils.dateTimeToLocalDateTime(expense.spentAt)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = MoneyUtils.formatCents(expense.totalAmountCents),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
                 )
             }
-            Text(
-                text = MoneyUtils.formatCents(expense.amountCents),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.error
-            )
+            expense.note?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
         }
     }
 }

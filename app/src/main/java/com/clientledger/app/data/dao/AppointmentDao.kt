@@ -62,7 +62,7 @@ interface AppointmentDao {
 
     @Query(
         """
-        SELECT a.dateKey, (COALESCE(SUM(a.incomeCents), 0) - COALESCE(SUM(e.amountCents), 0)) as profit
+        SELECT a.dateKey, (COALESCE(SUM(a.incomeCents), 0) - COALESCE(SUM(e.totalAmountCents), 0)) as profit
         FROM appointments a
         LEFT JOIN expenses e ON a.dateKey = e.dateKey
         WHERE a.dateKey >= :startDate AND a.dateKey <= :endDate AND a.isPaid = 1 AND a.status != 'CANCELED'

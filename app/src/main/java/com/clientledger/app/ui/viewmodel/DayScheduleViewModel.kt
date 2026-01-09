@@ -145,34 +145,60 @@ class DayScheduleViewModel(
      * Получить offset для прокрутки к ближайшей записи или текущему времени
      * @param isToday true если это сегодняшний день
      * @param slotHeightPx высота одного слота в пикселях
-     * @return offset в пикселях для прокрутки
+     * @return offset в пикселях для прокрутки (относительно начала рабочего дня 09:00)
      */
     fun getScrollOffset(isToday: Boolean, slotHeightPx: Float): Float {
         val appointments = _uiState.value.appointments
-        val slotIndex = findNearestAppointmentSlot(isToday)
+        val expenses = _uiState.value.expenses
+        val allEvents = (appointments.map { it.appointment.startsAt } + expenses.map { it.spentAt })
+            .sorted() // Combine and sort all event start times
         
-        if (slotIndex != null && slotIndex < appointments.size) {
-            val appointment = appointments[slotIndex]
-            val dateTime = com.clientledger.app.util.DateUtils.dateTimeToLocalDateTime(appointment.appointment.startsAt)
+        // Filter events within working hours (09:00-21:00)
+        val workingDayStartMinutes = 9 * 60 // 09:00 = 540 minutes
+        val workingDayEndMinutes = 21 * 60 // 21:00 = 1260 minutes
+        
+        val inRangeEvents = allEvents.filter { eventTimeMillis ->
+            val dateTime = com.clientledger.app.util.DateUtils.dateTimeToLocalDateTime(eventTimeMillis)
+            val eventMinutes = dateTime.hour * 60 + dateTime.minute
+            eventMinutes in workingDayStartMinutes..workingDayEndMinutes
+        }
+        
+        if (inRangeEvents.isNotEmpty()) {
+            // Find nearest event
+            val nearestEventTimeMillis = if (isToday) {
+                val nowMillis = System.currentTimeMillis()
+                inRangeEvents.firstOrNull { it >= nowMillis } ?: inRangeEvents.last()
+            } else {
+                inRangeEvents.first()
+            }
+            
+            val dateTime = com.clientledger.app.util.DateUtils.dateTimeToLocalDateTime(nearestEventTimeMillis)
             val startMinutes = dateTime.hour * 60 + dateTime.minute
-            val normalizedStartMinutes = (startMinutes / 5) * 5 // Нормализуем к 5-минутным слотам
+            // Calculate position relative to working hours start (09:00)
+            val relativeStartMinutes = startMinutes - workingDayStartMinutes
+            val normalizedStartMinutes = ((relativeStartMinutes / 5) * 5).coerceAtLeast(0) // Нормализуем к 5-минутным слотам
             val startSlot = normalizedStartMinutes / 5
             // Прокручиваем немного выше записи (на 2 часа назад)
             val scrollSlot = maxOf(0, startSlot - 24) // 24 слота = 2 часа
             return scrollSlot * slotHeightPx
         }
         
-        // Если записей нет, прокручиваем к текущему времени (для сегодня) или к 08:00 (для другого дня)
+        // Если записей нет, прокручиваем к текущему времени (для сегодня) или к началу рабочего дня (09:00) (для другого дня)
         if (isToday) {
             val now = LocalTime.now()
             val nowMinutes = now.hour * 60 + now.minute
-            val normalizedMinutes = (nowMinutes / 5) * 5
-            val scrollSlot = maxOf(0, (normalizedMinutes / 5) - 24) // 2 часа назад
-            return scrollSlot * slotHeightPx
-        } else {
-            // Для другого дня - к 08:00 (96 слотов = 8 часов * 12 слотов)
-            return 96f * slotHeightPx
+            
+            // Only scroll if current time is within working hours
+            if (nowMinutes in workingDayStartMinutes..workingDayEndMinutes) {
+                val relativeMinutes = nowMinutes - workingDayStartMinutes
+                val normalizedMinutes = ((relativeMinutes / 5) * 5).coerceAtLeast(0)
+                val scrollSlot = maxOf(0, (normalizedMinutes / 5) - 24) // 2 часа назад
+                return scrollSlot * slotHeightPx
+            }
         }
+        
+        // Default: scroll to start of working day (09:00) with a bit of offset
+        return 0f * slotHeightPx // Start at top (09:00)
     }
 }
 

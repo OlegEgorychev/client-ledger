@@ -47,8 +47,10 @@ import kotlin.math.max
 private const val STEP_MINUTES = 5 // Шаг временной сетки в минутах
 private const val MINUTES_PER_HOUR = 60
 private const val SLOTS_PER_HOUR = MINUTES_PER_HOUR / STEP_MINUTES // 12 слотов по 5 минут в часе
-private const val HOURS_PER_DAY = 24
-private const val SLOTS_PER_DAY = HOURS_PER_DAY * SLOTS_PER_HOUR // 288 слотов по 5 минут в дне
+private const val WORKING_HOURS_START = 9 // Рабочие часы начинаются с 09:00
+private const val WORKING_HOURS_END = 21 // Рабочие часы заканчиваются в 21:00 (inclusive)
+private const val WORKING_HOURS_COUNT = WORKING_HOURS_END - WORKING_HOURS_START + 1 // 13 часов (09:00-21:00 inclusive)
+private const val SLOTS_PER_WORKING_DAY = WORKING_HOURS_COUNT * SLOTS_PER_HOUR // 156 слотов (13 часов * 12 слотов)
 private const val SLOT_HEIGHT_DP = 10f // Высота одного 5-минутного слота в dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -317,11 +319,14 @@ fun buildTimelineBlocks(
 ): List<TimelineBlock> {
     val blocks = mutableListOf<TimelineBlock>()
     
-    // Build appointment blocks
+    // Build appointment blocks (position relative to working hours start 09:00)
     appointments.forEachIndexed { index, appointmentWithClient ->
         val dateTime = DateUtils.dateTimeToLocalDateTime(appointmentWithClient.appointment.startsAt)
         val startMinutes = dateTime.hour * MINUTES_PER_HOUR + dateTime.minute
-        val normalizedStartMinutes = (startMinutes / STEP_MINUTES) * STEP_MINUTES
+        // Calculate position relative to working hours start (09:00)
+        val workingDayStartMinutes = WORKING_HOURS_START * 60 // 09:00 = 540 minutes
+        val relativeStartMinutes = startMinutes - workingDayStartMinutes
+        val normalizedStartMinutes = ((relativeStartMinutes / STEP_MINUTES) * STEP_MINUTES).coerceAtLeast(0)
         val durationMinutes = max(15, appointmentWithClient.appointment.durationMinutes)
         val normalizedDurationMinutes = ((durationMinutes + STEP_MINUTES - 1) / STEP_MINUTES) * STEP_MINUTES
         val startSlot = normalizedStartMinutes / STEP_MINUTES
@@ -354,11 +359,14 @@ fun buildTimelineBlocks(
         )
     }
     
-    // Build expense blocks
+    // Build expense blocks (position relative to working hours start 09:00)
     expenses.forEach { expense ->
         val dateTime = DateUtils.dateTimeToLocalDateTime(expense.spentAt)
         val startMinutes = dateTime.hour * MINUTES_PER_HOUR + dateTime.minute
-        val normalizedStartMinutes = (startMinutes / STEP_MINUTES) * STEP_MINUTES
+        // Calculate position relative to working hours start (09:00)
+        val workingDayStartMinutes = WORKING_HOURS_START * 60 // 09:00 = 540 minutes
+        val relativeStartMinutes = startMinutes - workingDayStartMinutes
+        val normalizedStartMinutes = ((relativeStartMinutes / STEP_MINUTES) * STEP_MINUTES).coerceAtLeast(0)
         val normalizedDurationMinutes = ((EXPENSE_DURATION_MINUTES + STEP_MINUTES - 1) / STEP_MINUTES) * STEP_MINUTES
         val startSlot = normalizedStartMinutes / STEP_MINUTES
         val durationSlots = normalizedDurationMinutes / STEP_MINUTES
@@ -452,35 +460,69 @@ fun DayScheduleContent(
     val slotHeightPx = with(density) { slotHeightDp.toPx() }
     // Высота одного часа (12 слотов по 5 минут)
     val hourHeight = (SLOTS_PER_HOUR * SLOT_HEIGHT_DP).dp
-    // Общая высота дня (288 слотов по 5 минут)
-    val totalHeight = (SLOTS_PER_DAY * SLOT_HEIGHT_DP).dp
+    // Общая высота рабочего дня (09:00-21:00, 156 слотов по 5 минут)
+    val totalHeight = (SLOTS_PER_WORKING_DAY * SLOT_HEIGHT_DP).dp
     val scrollState = rememberScrollState()
+    
+    // Filter appointments and expenses: in-range (09:00-21:00 inclusive) vs out-of-range
+    val (inRangeAppointments, outOfRangeAppointments) = appointments.partition { appointment ->
+        val dateTime = DateUtils.dateTimeToLocalDateTime(appointment.appointment.startsAt)
+        val hour = dateTime.hour
+        val minute = dateTime.minute
+        // In range if hour is between 9 and 20, or exactly 9:00 or 21:00 (21:00 inclusive means minute == 0)
+        hour in WORKING_HOURS_START until WORKING_HOURS_END || 
+        (hour == WORKING_HOURS_START) || 
+        (hour == WORKING_HOURS_END && minute == 0)
+    }
+    
+    val (inRangeExpenses, outOfRangeExpenses) = expenses.partition { expense ->
+        val dateTime = DateUtils.dateTimeToLocalDateTime(expense.spentAt)
+        val hour = dateTime.hour
+        val minute = dateTime.minute
+        // In range if hour is between 9 and 20, or exactly 9:00 or 21:00 (21:00 inclusive means minute == 0)
+        hour in WORKING_HOURS_START until WORKING_HOURS_END || 
+        (hour == WORKING_HOURS_START) || 
+        (hour == WORKING_HOURS_END && minute == 0)
+    }
     
     // Автопрокрутка к ближайшей записи при открытии экрана, обновлении записей или смене даты
     // Добавляем viewModel.uiState.value.date в зависимости, чтобы автоскролл срабатывал при смене даты
     val currentDate = viewModel.uiState.value.date
-    LaunchedEffect(appointments.size, isToday, currentDate) {
+    LaunchedEffect(appointments.size, expenses.size, isToday, currentDate) {
         delay(150) // Небольшая задержка для завершения рендеринга
-        if (appointments.isNotEmpty() || isToday) {
+        if (appointments.isNotEmpty() || expenses.isNotEmpty() || isToday) {
             val scrollOffset = viewModel.getScrollOffset(isToday, slotHeightPx)
             scrollState.scrollTo(scrollOffset.toInt())
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Левая колонка с часами (уменьшенная ширина)
-            Box(
-                modifier = Modifier
-                    .width(56.dp)
-                    .fillMaxHeight()
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+    ) {
+        // Out-of-range section (items before 09:00 or after 21:00)
+        if (outOfRangeAppointments.isNotEmpty() || outOfRangeExpenses.isNotEmpty()) {
+            OutOfRangeSection(
+                outOfRangeAppointments = outOfRangeAppointments,
+                outOfRangeExpenses = outOfRangeExpenses,
+                onAppointmentClick = onAppointmentClick,
+                onExpenseClick = onExpenseClick,
+                modifier = Modifier.fillMaxWidth()
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        }
+        
+        // Main timeline (09:00-21:00)
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
+                // Левая колонка с часами (уменьшенная ширина)
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(scrollState)
+                        .width(56.dp)
+                        .height(totalHeight)
                 ) {
                     TimeColumn(
                         slotHeightPx = slotHeightPx,
@@ -489,81 +531,68 @@ fun DayScheduleContent(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-            }
-            
-            // Gutter (небольшой отступ между временем и сеткой)
-            Spacer(modifier = Modifier.width(8.dp))
+                
+                // Gutter (небольшой отступ между временем и сеткой)
+                Spacer(modifier = Modifier.width(8.dp))
 
-            // Правая колонка с временной сеткой и записями
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-            ) {
-                Column(
+                // Правая колонка с временной сеткой и записями
+                Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(scrollState)
+                        .weight(1f)
+                        .height(totalHeight)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(totalHeight)
-                    ) {
-                        // Временная сетка (5-минутные блоки с линиями)
-                        TimeGrid(
-                            slotHeightDp = slotHeightDp,
+                    // Временная сетка (5-минутные блоки с линиями)
+                    TimeGrid(
+                        slotHeightDp = slotHeightDp,
+                        slotHeightPx = slotHeightPx,
+                        hourHeight = hourHeight,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    // Линия текущего времени (только для сегодня)
+                    if (isToday) {
+                        CurrentTimeIndicator(
                             slotHeightPx = slotHeightPx,
-                            hourHeight = hourHeight,
+                            density = density,
                             modifier = Modifier.fillMaxSize()
                         )
+                    }
 
-                        // Линия текущего времени (только для сегодня)
-                        if (isToday) {
-                            CurrentTimeIndicator(
-                                slotHeightPx = slotHeightPx,
-                                density = density,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-
-                        // Combine appointments and expenses, determine overlaps for side-by-side layout
-                        val sortedAppointments = appointments.sortedBy { it.appointment.startsAt }
-                        val sortedExpenses = expenses.sortedBy { it.spentAt }
-                        
-                        // Build timeline blocks with overlap detection
-                        val timelineBlocks = buildTimelineBlocks(
-                            appointments = sortedAppointments,
-                            expenses = sortedExpenses,
-                            slotHeightPx = slotHeightPx
-                        )
-                        
-                        // Render timeline blocks
-                        timelineBlocks.forEach { block ->
-                            when (block) {
-                                is TimelineBlock.AppointmentBlock -> {
-                                    AppointmentCardOnTimeline(
-                                        appointment = block.appointment.appointment,
-                                        clientName = block.appointment.clientName,
-                                        slotHeightPx = slotHeightPx,
-                                        density = density,
-                                        hasNextAdjacent = block.hasNextAdjacent,
-                                        hasPrevAdjacent = block.hasPrevAdjacent,
-                                        widthFraction = block.widthFraction,
-                                        offsetFraction = block.offsetFraction,
-                                        onClick = { onAppointmentClick(block.appointment.appointment.id) }
-                                    )
-                                }
-                                is TimelineBlock.ExpenseBlock -> {
-                                    ExpenseCardOnTimeline(
-                                        expense = block.expense,
-                                        slotHeightPx = slotHeightPx,
-                                        density = density,
-                                        widthFraction = block.widthFraction,
-                                        offsetFraction = block.offsetFraction,
-                                        onClick = { onExpenseClick(block.expense.id) }
-                                    )
-                                }
+                    // Build timeline blocks with overlap detection (only in-range items)
+                    val sortedAppointments = inRangeAppointments.sortedBy { it.appointment.startsAt }
+                    val sortedExpenses = inRangeExpenses.sortedBy { it.spentAt }
+                    
+                    val timelineBlocks = buildTimelineBlocks(
+                        appointments = sortedAppointments,
+                        expenses = sortedExpenses,
+                        slotHeightPx = slotHeightPx
+                    )
+                    
+                    // Render timeline blocks
+                    timelineBlocks.forEach { block ->
+                        when (block) {
+                            is TimelineBlock.AppointmentBlock -> {
+                                AppointmentCardOnTimeline(
+                                    appointment = block.appointment.appointment,
+                                    clientName = block.appointment.clientName,
+                                    slotHeightPx = slotHeightPx,
+                                    density = density,
+                                    hasNextAdjacent = block.hasNextAdjacent,
+                                    hasPrevAdjacent = block.hasPrevAdjacent,
+                                    widthFraction = block.widthFraction,
+                                    offsetFraction = block.offsetFraction,
+                                    onClick = { onAppointmentClick(block.appointment.appointment.id) }
+                                )
+                            }
+                            is TimelineBlock.ExpenseBlock -> {
+                                ExpenseCardOnTimeline(
+                                    expense = block.expense,
+                                    slotHeightPx = slotHeightPx,
+                                    density = density,
+                                    widthFraction = block.widthFraction,
+                                    offsetFraction = block.offsetFraction,
+                                    onClick = { onExpenseClick(block.expense.id) }
+                                )
                             }
                         }
                     }
@@ -592,13 +621,14 @@ fun TimeColumn(
     
     Box(
         modifier = modifier
-            .height((SLOTS_PER_DAY * slotHeightPx).dp)
+            .height((SLOTS_PER_WORKING_DAY * slotHeightPx).dp)
             .fillMaxWidth()
     ) {
-        // Рисуем метки времени точно на часовых линиях
-        repeat(HOURS_PER_DAY) { hour ->
-            // Y-позиция часовой линии в пикселях (единый расчет с TimeGrid)
-            val hourSlotIndex = hour * SLOTS_PER_HOUR
+        // Рисуем метки времени точно на часовых линиях (только рабочие часы 09:00-21:00)
+        repeat(WORKING_HOURS_COUNT) { hourIndex ->
+            val hour = WORKING_HOURS_START + hourIndex
+            // Y-позиция часовой линии в пикселях (относительно начала рабочего дня 09:00)
+            val hourSlotIndex = hourIndex * SLOTS_PER_HOUR
             val yPx = hourSlotIndex * slotHeightPx
             
             // Выравниваем базовую линию текста с часовой линией
@@ -637,10 +667,9 @@ fun TimeGrid(
                 color = colorScheme.surface
             )
             .drawBehind {
-                // Рисуем линии времени
-                repeat(SLOTS_PER_DAY + 1) { slotIndex ->
+                // Рисуем линии времени (только рабочие часы 09:00-21:00)
+                repeat(SLOTS_PER_WORKING_DAY + 1) { slotIndex ->
                     val y = slotIndex * slotHeightPx
-                    val hour = slotIndex / SLOTS_PER_HOUR
                     val slotInHour = slotIndex % SLOTS_PER_HOUR
                     
                     // Усиленная линия каждый час
@@ -657,15 +686,15 @@ fun TimeGrid(
                 }
             }
     ) {
-        // Фон с чередованием цветов для часов
+        // Фон с чередованием цветов для часов (только рабочие часы)
         Column(modifier = Modifier.fillMaxSize()) {
-            repeat(HOURS_PER_DAY) { hour ->
+            repeat(WORKING_HOURS_COUNT) { hourIndex ->
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(hourHeight)
                         .background(
-                            color = if (hour % 2 == 0) {
+                            color = if (hourIndex % 2 == 0) {
                                 Color.Transparent
                             } else {
                                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
@@ -688,7 +717,20 @@ fun CurrentTimeIndicator(
 ) {
     val now = remember { LocalTime.now() }
     val nowMinutes = now.hour * 60 + now.minute
-    val normalizedMinutes = (nowMinutes / 5) * 5 // Нормализуем к 5-минутным слотам
+    
+    // Only show indicator if current time is within working hours (09:00-21:00)
+    val isInWorkingHours = now.hour in WORKING_HOURS_START until WORKING_HOURS_END ||
+            (now.hour == WORKING_HOURS_START && now.minute == 0) ||
+            (now.hour == WORKING_HOURS_END && now.minute == 0)
+    
+    if (!isInWorkingHours) {
+        return // Don't render indicator outside working hours
+    }
+    
+    // Calculate position relative to working hours start (09:00)
+    val workingDayStartMinutes = WORKING_HOURS_START * 60 // 09:00 = 540 minutes
+    val relativeMinutes = nowMinutes - workingDayStartMinutes
+    val normalizedMinutes = ((relativeMinutes / 5) * 5).coerceAtLeast(0) // Нормализуем к 5-минутным слотам
     val startSlot = normalizedMinutes / 5
     val yPx = startSlot * slotHeightPx
     
@@ -745,19 +787,23 @@ fun AppointmentCardOnTimeline(
     // Время начала записи в минутах от начала дня (00:00)
     val startMinutes = dateTime.hour * MINUTES_PER_HOUR + dateTime.minute
     
+    // Calculate position relative to working hours start (09:00)
+    val workingDayStartMinutes = WORKING_HOURS_START * 60 // 09:00 = 540 minutes
+    val relativeStartMinutes = startMinutes - workingDayStartMinutes
+    
     // Нормализуем время начала к ближайшему 5-минутному слоту (округление вниз)
-    val normalizedStartMinutes = (startMinutes / STEP_MINUTES) * STEP_MINUTES
+    val normalizedStartMinutes = ((relativeStartMinutes / STEP_MINUTES) * STEP_MINUTES).coerceAtLeast(0)
     
     // Длительность записи (минимум 15 минут)
     val durationMinutes = max(15, appointment.durationMinutes)
     // Нормализуем длительность к ближайшему 5-минутному слоту (округление вверх)
     val normalizedDurationMinutes = ((durationMinutes + STEP_MINUTES - 1) / STEP_MINUTES) * STEP_MINUTES
     
-    // Вычисляем позицию на основе 5-минутных слотов (используем целые числа)
+    // Вычисляем позицию на основе 5-минутных слотов относительно 09:00
     val startSlot = normalizedStartMinutes / STEP_MINUTES
     val durationSlots = normalizedDurationMinutes / STEP_MINUTES
     
-    // Позиция и высота в пикселях (точные значения)
+    // Позиция и высота в пикселях (точные значения, относительно 09:00)
     val topPx = startSlot * slotHeightPx
     val heightPx = durationSlots * slotHeightPx
     
@@ -765,12 +811,8 @@ fun AppointmentCardOnTimeline(
     val topOffsetDp = with(density) { topPx.toDp() }
     val cardHeightDp = with(density) { heightPx.toDp() }
     
-    // Время для отображения (используем нормализованное время)
-    val displayStartHour = normalizedStartMinutes / MINUTES_PER_HOUR
-    val displayStartMinute = normalizedStartMinutes % MINUTES_PER_HOUR
-    val displayStartTime = dateTime.toLocalDate().atTime(
-        LocalTime.of(displayStartHour, displayStartMinute)
-    )
+    // Время для отображения (используем реальное время из appointment)
+    val displayStartTime = dateTime.toLocalTime()
     val displayEndTime = displayStartTime.plusMinutes(normalizedDurationMinutes.toLong())
     
     val timeRange = "${String.format("%02d:%02d", displayStartTime.hour, displayStartTime.minute)} - " +
@@ -941,17 +983,21 @@ fun ExpenseCardOnTimeline(
     // Время начала расхода в минутах от начала дня (00:00)
     val startMinutes = dateTime.hour * MINUTES_PER_HOUR + dateTime.minute
     
+    // Calculate position relative to working hours start (09:00)
+    val workingDayStartMinutes = WORKING_HOURS_START * 60 // 09:00 = 540 minutes
+    val relativeStartMinutes = startMinutes - workingDayStartMinutes
+    
     // Нормализуем время начала к ближайшему 5-минутному слоту (округление вниз)
-    val normalizedStartMinutes = (startMinutes / STEP_MINUTES) * STEP_MINUTES
+    val normalizedStartMinutes = ((relativeStartMinutes / STEP_MINUTES) * STEP_MINUTES).coerceAtLeast(0)
     
     // Фиксированная длительность расхода (15 минут)
     val normalizedDurationMinutes = ((EXPENSE_DURATION_MINUTES + STEP_MINUTES - 1) / STEP_MINUTES) * STEP_MINUTES
     
-    // Вычисляем позицию на основе 5-минутных слотов
+    // Вычисляем позицию на основе 5-минутных слотов относительно 09:00
     val startSlot = normalizedStartMinutes / STEP_MINUTES
     val durationSlots = normalizedDurationMinutes / STEP_MINUTES
     
-    // Позиция и высота в пикселях
+    // Позиция и высота в пикселях (относительно 09:00)
     val topPx = startSlot * slotHeightPx
     val heightPx = durationSlots * slotHeightPx
     
@@ -959,13 +1005,8 @@ fun ExpenseCardOnTimeline(
     val topOffsetDp = with(density) { topPx.toDp() }
     val cardHeightDp = with(density) { heightPx.toDp() }
     
-    // Время для отображения
-    val displayStartHour = normalizedStartMinutes / MINUTES_PER_HOUR
-    val displayStartMinute = normalizedStartMinutes % MINUTES_PER_HOUR
-    val displayTime = dateTime.toLocalDate().atTime(
-        LocalTime.of(displayStartHour, displayStartMinute)
-    )
-    
+    // Время для отображения (используем реальное время из expense)
+    val displayTime = dateTime.toLocalTime()
     val timeText = String.format("%02d:%02d", displayTime.hour, displayTime.minute)
     
     val colorScheme = MaterialTheme.colorScheme
@@ -1037,6 +1078,124 @@ fun ExpenseCardOnTimeline(
                             color = MaterialTheme.colorScheme.error
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun OutOfRangeSection(
+    outOfRangeAppointments: List<AppointmentWithClient>,
+    outOfRangeExpenses: List<ExpenseEntity>,
+    onAppointmentClick: (Long) -> Unit,
+    onExpenseClick: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (outOfRangeAppointments.isEmpty() && outOfRangeExpenses.isEmpty()) {
+        return
+    }
+    
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Вне 09:00–21:00",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        
+        // Out-of-range appointments
+        outOfRangeAppointments.forEach { appointmentWithClient ->
+            val dateTime = DateUtils.dateTimeToLocalDateTime(appointmentWithClient.appointment.startsAt)
+            val timeText = String.format("%02d:%02d", dateTime.hour, dateTime.minute)
+            
+            Card(
+                onClick = { onAppointmentClick(appointmentWithClient.appointment.id) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = appointmentWithClient.appointment.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = timeText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        appointmentWithClient.clientName?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Text(
+                        text = MoneyUtils.formatCents(appointmentWithClient.appointment.incomeCents),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+        
+        // Out-of-range expenses
+        outOfRangeExpenses.forEach { expense ->
+            val dateTime = DateUtils.dateTimeToLocalDateTime(expense.spentAt)
+            val timeText = String.format("%02d:%02d", dateTime.hour, dateTime.minute)
+            
+            Card(
+                onClick = { onExpenseClick(expense.id) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Расход",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = timeText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = MoneyUtils.formatCents(expense.totalAmountCents),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }

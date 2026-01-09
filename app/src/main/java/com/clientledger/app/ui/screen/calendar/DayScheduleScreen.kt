@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.entity.AppointmentEntity
+import com.clientledger.app.data.entity.ExpenseEntity
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.navigation.DayScheduleViewModelFactory
 import com.clientledger.app.ui.viewmodel.DayScheduleViewModel
@@ -57,6 +58,7 @@ fun DayScheduleScreen(
     repository: LedgerRepository,
     onBack: () -> Unit,
     onAppointmentClick: (Long) -> Unit,
+    onExpenseClick: (Long) -> Unit,
     onAddAppointment: () -> Unit,
     onAddExpense: () -> Unit,
     onDateChange: ((LocalDate) -> Unit)? = null
@@ -263,10 +265,15 @@ fun DayScheduleScreen(
         } else {
             DayScheduleContent(
                 appointments = uiState.appointments,
+                expenses = uiState.expenses,
                 isToday = isToday,
                 viewModel = viewModel,
                 onAppointmentClick = { appointmentId ->
                     onAppointmentClick(appointmentId)
+                },
+                onExpenseClick = { expenseId ->
+                    // Navigate to expense edit screen
+                    // TODO: Implement navigation to expense edit
                 },
                 modifier = Modifier.padding(paddingValues)
             )
@@ -274,12 +281,168 @@ fun DayScheduleScreen(
     }
 }
 
+// Timeline block data classes for overlap detection
+sealed class TimelineBlock {
+    abstract val topPx: Float
+    abstract val heightPx: Float
+    abstract val widthFraction: Float // 0.0 to 1.0
+    abstract val offsetFraction: Float // 0.0 to 1.0 (left offset)
+    
+    data class AppointmentBlock(
+        val appointment: AppointmentWithClient,
+        override val topPx: Float,
+        override val heightPx: Float,
+        val hasNextAdjacent: Boolean,
+        val hasPrevAdjacent: Boolean,
+        override val widthFraction: Float = 1f,
+        override val offsetFraction: Float = 0f
+    ) : TimelineBlock()
+    
+    data class ExpenseBlock(
+        val expense: ExpenseEntity,
+        override val topPx: Float,
+        override val heightPx: Float,
+        override val widthFraction: Float = 1f,
+        override val offsetFraction: Float = 0f
+    ) : TimelineBlock()
+}
+
+// Fixed duration for expense blocks (15 minutes)
+private const val EXPENSE_DURATION_MINUTES = 15
+
+// Build timeline blocks with overlap detection for side-by-side layout
+fun buildTimelineBlocks(
+    appointments: List<AppointmentWithClient>,
+    expenses: List<ExpenseEntity>,
+    slotHeightPx: Float
+): List<TimelineBlock> {
+    val blocks = mutableListOf<TimelineBlock>()
+    
+    // Build appointment blocks
+    appointments.forEachIndexed { index, appointmentWithClient ->
+        val dateTime = DateUtils.dateTimeToLocalDateTime(appointmentWithClient.appointment.startsAt)
+        val startMinutes = dateTime.hour * MINUTES_PER_HOUR + dateTime.minute
+        val normalizedStartMinutes = (startMinutes / STEP_MINUTES) * STEP_MINUTES
+        val durationMinutes = max(15, appointmentWithClient.appointment.durationMinutes)
+        val normalizedDurationMinutes = ((durationMinutes + STEP_MINUTES - 1) / STEP_MINUTES) * STEP_MINUTES
+        val startSlot = normalizedStartMinutes / STEP_MINUTES
+        val durationSlots = normalizedDurationMinutes / STEP_MINUTES
+        val topPx = startSlot * slotHeightPx
+        val heightPx = durationSlots * slotHeightPx
+        val endTimeMillis = dateTime.plusMinutes(normalizedDurationMinutes.toLong()).toMillis()
+        
+        val hasNextAdjacent = index < appointments.size - 1 && 
+            appointments[index + 1].appointment.startsAt == endTimeMillis
+        
+        val hasPrevAdjacent = if (index > 0) {
+            val prevDateTime = DateUtils.dateTimeToLocalDateTime(appointments[index - 1].appointment.startsAt)
+            val prevDuration = max(15, appointments[index - 1].appointment.durationMinutes)
+            val prevNormalizedDuration = ((prevDuration + STEP_MINUTES - 1) / STEP_MINUTES) * STEP_MINUTES
+            val prevEndTimeMillis = prevDateTime.plusMinutes(prevNormalizedDuration.toLong()).toMillis()
+            appointmentWithClient.appointment.startsAt == prevEndTimeMillis
+        } else {
+            false
+        }
+        
+        blocks.add(
+            TimelineBlock.AppointmentBlock(
+                appointment = appointmentWithClient,
+                topPx = topPx,
+                heightPx = heightPx,
+                hasNextAdjacent = hasNextAdjacent,
+                hasPrevAdjacent = hasPrevAdjacent
+            )
+        )
+    }
+    
+    // Build expense blocks
+    expenses.forEach { expense ->
+        val dateTime = DateUtils.dateTimeToLocalDateTime(expense.spentAt)
+        val startMinutes = dateTime.hour * MINUTES_PER_HOUR + dateTime.minute
+        val normalizedStartMinutes = (startMinutes / STEP_MINUTES) * STEP_MINUTES
+        val normalizedDurationMinutes = ((EXPENSE_DURATION_MINUTES + STEP_MINUTES - 1) / STEP_MINUTES) * STEP_MINUTES
+        val startSlot = normalizedStartMinutes / STEP_MINUTES
+        val durationSlots = normalizedDurationMinutes / STEP_MINUTES
+        val topPx = startSlot * slotHeightPx
+        val heightPx = durationSlots * slotHeightPx
+        
+        blocks.add(
+            TimelineBlock.ExpenseBlock(
+                expense = expense,
+                topPx = topPx,
+                heightPx = heightPx
+            )
+        )
+    }
+    
+    // Detect overlaps and adjust layout for side-by-side
+    val sortedBlocks = blocks.sortedBy { it.topPx }
+    
+    // For each block, find overlapping blocks and apply side-by-side layout
+    val result = mutableListOf<TimelineBlock>()
+    sortedBlocks.forEach { block ->
+        // Find all blocks that overlap with this block
+        val overlappingBlocks = sortedBlocks.filter { otherBlock ->
+            block != otherBlock && overlaps(block, otherBlock)
+        }
+        
+        // Check if we have appointment+expense overlap for side-by-side layout
+        val hasAppointmentOverlap = overlappingBlocks.any { it is TimelineBlock.AppointmentBlock }
+        val hasExpenseOverlap = overlappingBlocks.any { it is TimelineBlock.ExpenseBlock }
+        val isAppointmentExpenseOverlap = (block is TimelineBlock.AppointmentBlock && hasExpenseOverlap) ||
+                (block is TimelineBlock.ExpenseBlock && hasAppointmentOverlap)
+        
+        if (isAppointmentExpenseOverlap && overlappingBlocks.size == 1) {
+            // Side-by-side layout: appointment on left, expense on right
+            if (block is TimelineBlock.AppointmentBlock) {
+                // Appointment: left side (50% width)
+                result.add(
+                    TimelineBlock.AppointmentBlock(
+                        appointment = block.appointment,
+                        topPx = block.topPx,
+                        heightPx = block.heightPx,
+                        hasNextAdjacent = block.hasNextAdjacent,
+                        hasPrevAdjacent = block.hasPrevAdjacent,
+                        widthFraction = 0.5f,
+                        offsetFraction = 0f
+                    )
+                )
+            } else if (block is TimelineBlock.ExpenseBlock) {
+                // Expense: right side (50% width)
+                result.add(
+                    TimelineBlock.ExpenseBlock(
+                        expense = block.expense,
+                        topPx = block.topPx,
+                        heightPx = block.heightPx,
+                        widthFraction = 0.5f,
+                        offsetFraction = 0.5f
+                    )
+                )
+            }
+        } else {
+            // No overlaps or multiple overlaps: use default layout
+            result.add(block)
+        }
+    }
+    
+    return result
+}
+
+// Check if two timeline blocks overlap
+fun overlaps(block1: TimelineBlock, block2: TimelineBlock): Boolean {
+    val block1End = block1.topPx + block1.heightPx
+    val block2End = block2.topPx + block2.heightPx
+    return !(block1End <= block2.topPx || block2End <= block1.topPx)
+}
+
 @Composable
 fun DayScheduleContent(
     appointments: List<AppointmentWithClient>,
+    expenses: List<ExpenseEntity>,
     isToday: Boolean,
     viewModel: DayScheduleViewModel,
     onAppointmentClick: (Long) -> Unit,
+    onExpenseClick: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -365,41 +528,44 @@ fun DayScheduleContent(
                             )
                         }
 
-                        // Записи (сортируем по времени начала для правильного определения соседних)
+                        // Combine appointments and expenses, determine overlaps for side-by-side layout
                         val sortedAppointments = appointments.sortedBy { it.appointment.startsAt }
-                        sortedAppointments.forEachIndexed { index, appointmentWithClient ->
-                            // Вычисляем время окончания текущей записи (в миллисекундах)
-                            val currentStartDateTime = DateUtils.dateTimeToLocalDateTime(appointmentWithClient.appointment.startsAt)
-                            val currentEndDateTime = currentStartDateTime.plusMinutes(
-                                max(15, appointmentWithClient.appointment.durationMinutes).toLong()
-                            )
-                            val currentEndTimeMillis = currentEndDateTime.toMillis()
-                            
-                            // Определяем, есть ли следующая запись, которая начинается сразу после этой
-                            val hasNextAdjacent = index < sortedAppointments.size - 1 && 
-                                sortedAppointments[index + 1].appointment.startsAt == currentEndTimeMillis
-                            
-                            // Определяем, есть ли предыдущая запись, которая заканчивается прямо перед этой
-                            val hasPrevAdjacent = if (index > 0) {
-                                val prevStartDateTime = DateUtils.dateTimeToLocalDateTime(sortedAppointments[index - 1].appointment.startsAt)
-                                val prevEndDateTime = prevStartDateTime.plusMinutes(
-                                    max(15, sortedAppointments[index - 1].appointment.durationMinutes).toLong()
-                                )
-                                val prevEndTimeMillis = prevEndDateTime.toMillis()
-                                appointmentWithClient.appointment.startsAt == prevEndTimeMillis
-                            } else {
-                                false
+                        val sortedExpenses = expenses.sortedBy { it.spentAt }
+                        
+                        // Build timeline blocks with overlap detection
+                        val timelineBlocks = buildTimelineBlocks(
+                            appointments = sortedAppointments,
+                            expenses = sortedExpenses,
+                            slotHeightPx = slotHeightPx
+                        )
+                        
+                        // Render timeline blocks
+                        timelineBlocks.forEach { block ->
+                            when (block) {
+                                is TimelineBlock.AppointmentBlock -> {
+                                    AppointmentCardOnTimeline(
+                                        appointment = block.appointment.appointment,
+                                        clientName = block.appointment.clientName,
+                                        slotHeightPx = slotHeightPx,
+                                        density = density,
+                                        hasNextAdjacent = block.hasNextAdjacent,
+                                        hasPrevAdjacent = block.hasPrevAdjacent,
+                                        widthFraction = block.widthFraction,
+                                        offsetFraction = block.offsetFraction,
+                                        onClick = { onAppointmentClick(block.appointment.appointment.id) }
+                                    )
+                                }
+                                is TimelineBlock.ExpenseBlock -> {
+                                    ExpenseCardOnTimeline(
+                                        expense = block.expense,
+                                        slotHeightPx = slotHeightPx,
+                                        density = density,
+                                        widthFraction = block.widthFraction,
+                                        offsetFraction = block.offsetFraction,
+                                        onClick = { onExpenseClick(block.expense.id) }
+                                    )
+                                }
                             }
-                            
-                            AppointmentCardOnTimeline(
-                                appointment = appointmentWithClient.appointment,
-                                clientName = appointmentWithClient.clientName,
-                                slotHeightPx = slotHeightPx,
-                                density = density,
-                                hasNextAdjacent = hasNextAdjacent,
-                                hasPrevAdjacent = hasPrevAdjacent,
-                                onClick = { onAppointmentClick(appointmentWithClient.appointment.id) }
-                            )
                         }
                     }
                 }
@@ -571,6 +737,8 @@ fun AppointmentCardOnTimeline(
     density: androidx.compose.ui.unit.Density,
     hasNextAdjacent: Boolean = false,
     hasPrevAdjacent: Boolean = false,
+    widthFraction: Float = 1f,
+    offsetFraction: Float = 0f,
     onClick: () -> Unit
 ) {
     val dateTime = DateUtils.dateTimeToLocalDateTime(appointment.startsAt)
@@ -640,103 +808,232 @@ fun AppointmentCardOnTimeline(
             .fillMaxWidth()
             .height(cardHeightDp)
     ) {
-        // Разделитель между соседними записями (если есть следующая запись)
-        if (hasNextAdjacent) {
-            HorizontalDivider(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                color = borderColor,
-                thickness = 1.dp
-            )
-        }
-        
-        Card(
-            onClick = onClick,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 4.dp)
-                .border(
-                    width = borderWidth,
-                    color = borderColor,
-                    shape = shape
-                )
-                .then(
-                    if (isCanceled) {
-                        Modifier.alpha(0.5f)
-                    } else {
-                        Modifier
-                    }
-                ),
-            shape = shape,
-            colors = CardDefaults.cardColors(
-                containerColor = if (isCanceled) {
-                    colorScheme.surfaceVariant
-                } else {
-                    colorScheme.primaryContainer
-                }
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        // Apply width and offset for side-by-side layout using Row
+        Row(
+            modifier = Modifier.fillMaxSize()
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            // Left offset spacer
+            if (offsetFraction > 0f) {
+                Spacer(modifier = Modifier.fillMaxWidth(offsetFraction))
+            }
+            
+            // Card with adjusted width
+            Box(
+                modifier = Modifier.fillMaxWidth(widthFraction)
             ) {
-                if (isCanceled) {
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.errorContainer
+                // Разделитель между соседними записями (если есть следующая запись)
+                if (hasNextAdjacent) {
+                    HorizontalDivider(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        color = borderColor,
+                        thickness = 1.dp
+                    )
+                }
+                
+                Card(
+                    onClick = onClick,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 4.dp)
+                        .border(
+                            width = borderWidth,
+                            color = borderColor,
+                            shape = shape
+                        )
+                        .then(
+                            if (isCanceled) {
+                                Modifier.alpha(0.5f)
+                            } else {
+                                Modifier
+                            }
+                        ),
+                    shape = shape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isCanceled) {
+                            colorScheme.surfaceVariant
+                        } else {
+                            colorScheme.primaryContainer
+                        }
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (isCanceled) {
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.errorContainer
+                            ) {
+                                Text(
+                                    text = "Отменено",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = appointment.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            color = if (isCanceled) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            }
+                        )
+                        Text(
+                            text = timeRange,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isCanceled) {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                            } else {
+                                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                            }
+                        )
+                        clientName?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isCanceled) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                } else {
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                                },
+                                maxLines = 1
+                            )
+                        }
+                        if (!isCanceled) {
+                            Text(
+                                text = MoneyUtils.formatCents(appointment.incomeCents),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ExpenseCardOnTimeline(
+    expense: ExpenseEntity,
+    slotHeightPx: Float,
+    density: androidx.compose.ui.unit.Density,
+    widthFraction: Float = 1f,
+    offsetFraction: Float = 0f,
+    onClick: () -> Unit
+) {
+    val dateTime = DateUtils.dateTimeToLocalDateTime(expense.spentAt)
+    
+    // Время начала расхода в минутах от начала дня (00:00)
+    val startMinutes = dateTime.hour * MINUTES_PER_HOUR + dateTime.minute
+    
+    // Нормализуем время начала к ближайшему 5-минутному слоту (округление вниз)
+    val normalizedStartMinutes = (startMinutes / STEP_MINUTES) * STEP_MINUTES
+    
+    // Фиксированная длительность расхода (15 минут)
+    val normalizedDurationMinutes = ((EXPENSE_DURATION_MINUTES + STEP_MINUTES - 1) / STEP_MINUTES) * STEP_MINUTES
+    
+    // Вычисляем позицию на основе 5-минутных слотов
+    val startSlot = normalizedStartMinutes / STEP_MINUTES
+    val durationSlots = normalizedDurationMinutes / STEP_MINUTES
+    
+    // Позиция и высота в пикселях
+    val topPx = startSlot * slotHeightPx
+    val heightPx = durationSlots * slotHeightPx
+    
+    // Конвертируем обратно в dp для использования в Modifier
+    val topOffsetDp = with(density) { topPx.toDp() }
+    val cardHeightDp = with(density) { heightPx.toDp() }
+    
+    // Время для отображения
+    val displayStartHour = normalizedStartMinutes / MINUTES_PER_HOUR
+    val displayStartMinute = normalizedStartMinutes % MINUTES_PER_HOUR
+    val displayTime = dateTime.toLocalDate().atTime(
+        LocalTime.of(displayStartHour, displayStartMinute)
+    )
+    
+    val timeText = String.format("%02d:%02d", displayTime.hour, displayTime.minute)
+    
+    val colorScheme = MaterialTheme.colorScheme
+    val cornerRadius = 8.dp
+    val shape = RoundedCornerShape(cornerRadius)
+    val borderColor = colorScheme.error.copy(alpha = 0.5f)
+    val borderWidth = 1.dp
+    
+    // Обертываем в Box для точного позиционирования
+    Box(
+        modifier = Modifier
+            .offset { IntOffset(0, topPx.toInt()) }
+            .fillMaxWidth()
+            .height(cardHeightDp)
+    ) {
+        // Apply width and offset for side-by-side layout using Row
+        Row(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // Left offset spacer
+            if (offsetFraction > 0f) {
+                Spacer(modifier = Modifier.fillMaxWidth(offsetFraction))
+            }
+            
+            // Card with adjusted width
+            Box(
+                modifier = Modifier.fillMaxWidth(widthFraction)
+            ) {
+                Card(
+                    onClick = onClick,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 4.dp)
+                        .border(
+                            width = borderWidth,
+                            color = borderColor,
+                            shape = shape
+                        ),
+                    shape = shape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = colorScheme.errorContainer.copy(alpha = 0.7f)
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "Отменено",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            text = "Расход",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = timeText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                        )
+                        Text(
+                            text = MoneyUtils.formatCents(expense.totalAmountCents),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
                         )
                     }
-                }
-                Text(
-                    text = appointment.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    color = if (isCanceled) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    }
-                )
-                Text(
-                    text = timeRange,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isCanceled) {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    } else {
-                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                    }
-                )
-                clientName?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isCanceled) {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        } else {
-                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        },
-                        maxLines = 1
-                    )
-                }
-                if (!isCanceled) {
-                    Text(
-                        text = MoneyUtils.formatCents(appointment.incomeCents),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
                 }
             }
         }

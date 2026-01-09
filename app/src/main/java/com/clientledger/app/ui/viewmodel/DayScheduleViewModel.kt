@@ -3,12 +3,14 @@ package com.clientledger.app.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.clientledger.app.data.entity.AppointmentEntity
+import com.clientledger.app.data.entity.ExpenseEntity
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.util.toDateKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -21,6 +23,7 @@ data class AppointmentWithClient(
 data class DayScheduleUiState(
     val date: LocalDate,
     val appointments: List<AppointmentWithClient> = emptyList(),
+    val expenses: List<ExpenseEntity> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -55,7 +58,11 @@ class DayScheduleViewModel(
         
         viewModelScope.launch {
             try {
-                repository.getAppointmentsByDate(dateKey).collect { appointments ->
+                // Combine appointments and expenses flows
+                combine(
+                    repository.getAppointmentsByDate(dateKey),
+                    repository.getExpensesByDate(dateKey)
+                ) { appointments, expenses ->
                     // Загружаем имена клиентов для каждой записи
                     val appointmentsWithClients = appointments.map { appointment ->
                         val client = repository.getClientById(appointment.clientId)
@@ -66,11 +73,15 @@ class DayScheduleViewModel(
                         )
                     }.sortedBy { it.appointment.startsAt } // Сортировка по времени начала
                     
+                    // Сортируем expenses по времени (spentAt)
+                    val sortedExpenses = expenses.sortedBy { it.spentAt }
+                    
                     _uiState.value = _uiState.value.copy(
                         appointments = appointmentsWithClients,
+                        expenses = sortedExpenses,
                         isLoading = false
                     )
-                }
+                }.collect { }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,

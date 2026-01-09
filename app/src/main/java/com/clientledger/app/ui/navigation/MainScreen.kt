@@ -117,6 +117,9 @@ fun MainScreen(
                         repository = repository,
                         onBack = { /* Не нужен, так как BottomBar всегда виден */ },
                         onAppointmentClick = onAppointmentClick,
+                        onExpenseClick = { expenseId ->
+                            navController.navigate("expense_edit/$expenseId/${localDate.toString()}")
+                        },
                         onAddAppointment = {
                             navController.navigate("appointment_edit/null/${localDate.toString()}")
                         },

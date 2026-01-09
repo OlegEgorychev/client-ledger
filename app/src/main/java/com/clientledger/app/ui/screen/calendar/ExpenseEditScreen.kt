@@ -30,7 +30,12 @@ import com.clientledger.app.util.MoneyUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.YearMonth
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.DropdownMenuItem
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -42,6 +47,12 @@ fun ExpenseEditScreen(
 ) {
     var selectedDate by remember { mutableStateOf(date) }
     var showDatePicker by remember { mutableStateOf(false) }
+    // Time selection for expense
+    var expenseHour by remember { mutableStateOf(LocalTime.now().hour) }
+    var expenseMinute by remember { mutableStateOf((LocalTime.now().minute / 5) * 5) } // Round to nearest 5 minutes
+    var showHourMenu by remember { mutableStateOf(false) }
+    var showMinuteMenu by remember { mutableStateOf(false) }
+    
     var selectedTags by remember { mutableStateOf<Set<ExpenseTag>>(emptySet()) }
     var tagAmounts by remember { mutableStateOf<Map<ExpenseTag, String>>(emptyMap()) }
     var note by remember { mutableStateOf("") }
@@ -51,13 +62,21 @@ fun ExpenseEditScreen(
     val scope = rememberCoroutineScope()
     val allTags = ExpenseTag.values().toList()
     
+    // Time picker lists (working hours 09:00-21:00)
+    val hours = (9..21).toList()
+    val minutes = (0..59 step 5).toList() // Step 5 minutes: 00, 05, 10, 15, ..., 55
+    
     // BringIntoViewRequester for amount fields
     val amountBringIntoViewRequester = remember { BringIntoViewRequester() }
     
-    // Initialize date from nav arg for new expenses
+    // Initialize date and time from nav arg for new expenses
     LaunchedEffect(date) {
         if (expenseId == null) {
             selectedDate = date
+            // Default to current time, clamped to working hours
+            val now = LocalTime.now()
+            expenseHour = now.hour.coerceIn(9, 21)
+            expenseMinute = (now.minute / 5) * 5 // Round to nearest 5 minutes
         }
     }
     
@@ -69,6 +88,11 @@ fun ExpenseEditScreen(
                 expense?.let {
                     selectedDate = LocalDate.parse(it.dateKey)
                     note = it.note ?: ""
+                    
+                    // Extract time from spentAt timestamp
+                    val dateTime = DateUtils.dateTimeToLocalDateTime(it.spentAt)
+                    expenseHour = dateTime.hour
+                    expenseMinute = (dateTime.minute / 5) * 5 // Round to nearest 5 minutes
                     
                     val items = repository.getExpenseItems(expenseId)
                     selectedTags = items.map { item -> item.tag }.toSet()
@@ -148,6 +172,77 @@ fun ExpenseEditScreen(
                     },
                     onDismiss = { showDatePicker = false }
                 )
+            }
+            
+            // Time picker
+            Text("Время расхода *", style = MaterialTheme.typography.labelSmall)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Hour picker
+                ExposedDropdownMenuBox(
+                    expanded = showHourMenu,
+                    onExpandedChange = { showHourMenu = !showHourMenu },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = String.format("%02d", expenseHour),
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Час") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showHourMenu) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = showHourMenu,
+                        onDismissRequest = { showHourMenu = false }
+                    ) {
+                        hours.forEach { hour ->
+                            DropdownMenuItem(
+                                text = { Text(String.format("%02d", hour)) },
+                                onClick = {
+                                    expenseHour = hour
+                                    showHourMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                // Minute picker
+                ExposedDropdownMenuBox(
+                    expanded = showMinuteMenu,
+                    onExpandedChange = { showMinuteMenu = !showMinuteMenu },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = String.format("%02d", expenseMinute),
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Минуты") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showMinuteMenu) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = showMinuteMenu,
+                        onDismissRequest = { showMinuteMenu = false }
+                    ) {
+                        minutes.forEach { minute ->
+                            DropdownMenuItem(
+                                text = { Text(String.format("%02d", minute)) },
+                                onClick = {
+                                    expenseMinute = minute
+                                    showMinuteMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
             
             // Tag selection
@@ -293,7 +388,11 @@ fun ExpenseEditScreen(
                         errorMessage = null
                         
                         try {
-                            val spentAt = selectedDate.atStartOfDay().toMillis()
+                            // Use selected date and time for spentAt timestamp
+                            val expenseTime = LocalTime.of(expenseHour, expenseMinute)
+                            val expenseDateTime = selectedDate.atTime(expenseTime)
+                            val spentAt = expenseDateTime.toMillis()
+                            
                             val expense = if (expenseId == null) {
                                 ExpenseEntity(
                                     spentAt = spentAt,

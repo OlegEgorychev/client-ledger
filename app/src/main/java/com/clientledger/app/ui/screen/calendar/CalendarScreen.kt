@@ -1,5 +1,7 @@
 package com.clientledger.app.ui.screen.calendar
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -122,48 +124,13 @@ fun CalendarScreen(
                 )
             }
             
-            // Statistics widgets at the bottom
+            // Profit widgets (expandable with income/expense details)
             Spacer(modifier = Modifier.height(16.dp))
             if (repository != null && onIncomeDetailClick != null) {
-                // Income widgets
-                StatisticsWidgets(
+                ExpandableProfitWidgets(
                     repository = repository,
-                    onTodayClick = {
-                        val today = LocalDate.now()
-                        onIncomeDetailClick(
-                            com.clientledger.app.ui.viewmodel.StatsPeriod.DAY,
-                            today,
-                            YearMonth.now(),
-                            today.year
-                        )
-                    },
-                    onMonthClick = {
-                        val currentMonth = YearMonth.now()
-                        onIncomeDetailClick(
-                            com.clientledger.app.ui.viewmodel.StatsPeriod.MONTH,
-                            LocalDate.now(),
-                            currentMonth,
-                            currentMonth.year
-                        )
-                    },
-                    onYearClick = {
-                        val currentYear = LocalDate.now().year
-                        onIncomeDetailClick(
-                            com.clientledger.app.ui.viewmodel.StatsPeriod.YEAR,
-                            LocalDate.now(),
-                            YearMonth.now(),
-                            currentYear
-                        )
-                    }
+                    onIncomeDetailClick = onIncomeDetailClick
                 )
-                
-                // Expenses widgets
-                Spacer(modifier = Modifier.height(8.dp))
-                ExpenseWidgets(repository = repository)
-                
-                // Net profit widgets
-                Spacer(modifier = Modifier.height(8.dp))
-                NetProfitWidgets(repository = repository)
             }
             
             // Theme selector (between stats widgets and version)
@@ -734,6 +701,281 @@ fun StatisticsWidget(
                 fontWeight = FontWeight.Bold,
                 color = valueColor ?: MaterialTheme.colorScheme.onSurface
             )
+        }
+    }
+}
+
+@Composable
+fun ExpandableProfitWidgets(
+    repository: LedgerRepository,
+    onIncomeDetailClick: (com.clientledger.app.ui.viewmodel.StatsPeriod, LocalDate, YearMonth, Int) -> Unit
+) {
+    val today = LocalDate.now()
+    val currentMonth = YearMonth.now()
+    val currentYear = today.year
+    
+    // Expanded card state (only one can be expanded at a time)
+    var expandedCard by remember { mutableStateOf<ProfitPeriod?>(null) }
+    
+    // Today data
+    var todayIncome by remember { mutableStateOf(0L) }
+    var todayExpenses by remember { mutableStateOf(0L) }
+    var todayNet by remember { mutableStateOf(0L) }
+    
+    // Month data
+    var monthIncome by remember { mutableStateOf(0L) }
+    var monthExpenses by remember { mutableStateOf(0L) }
+    var monthNet by remember { mutableStateOf(0L) }
+    
+    // Year data
+    var yearIncome by remember { mutableStateOf(0L) }
+    var yearExpenses by remember { mutableStateOf(0L) }
+    var yearNet by remember { mutableStateOf(0L) }
+    
+    // Observe data changes
+    val todayAppointments = repository.getAppointmentsByDate(today.toDateKey())
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val todayExpensesFlow = repository.getExpensesByDate(today.toDateKey())
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    val monthAppointments = repository.getAppointmentsByDateRange(
+        DateUtils.getStartOfMonth(currentMonth).toDateKey(),
+        DateUtils.getEndOfMonth(currentMonth).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    val monthExpensesFlow = repository.getExpensesByDateRange(
+        DateUtils.getStartOfMonth(currentMonth).toDateKey(),
+        DateUtils.getEndOfMonth(currentMonth).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    val yearAppointments = repository.getAppointmentsByDateRange(
+        DateUtils.getStartOfYear(currentYear).toDateKey(),
+        DateUtils.getEndOfYear(currentYear).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    val yearExpensesFlow = repository.getExpensesByDateRange(
+        DateUtils.getStartOfYear(currentYear).toDateKey(),
+        DateUtils.getEndOfYear(currentYear).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    val scope = rememberCoroutineScope()
+    
+    // Load today data
+    LaunchedEffect(today, todayAppointments.value, todayExpensesFlow.value) {
+        scope.launch {
+            todayIncome = repository.getIncomeForDay(today)
+            todayExpenses = repository.getExpensesForDay(today)
+            todayNet = repository.getNetProfitForDay(today)
+        }
+    }
+    
+    // Load month data
+    LaunchedEffect(currentMonth, monthAppointments.value, monthExpensesFlow.value) {
+        scope.launch {
+            monthIncome = repository.getIncomeForMonth(currentYear, currentMonth.monthValue)
+            monthExpenses = repository.getExpensesForMonth(currentYear, currentMonth.monthValue)
+            monthNet = repository.getNetProfitForMonth(currentYear, currentMonth.monthValue)
+        }
+    }
+    
+    // Load year data
+    LaunchedEffect(currentYear, yearAppointments.value, yearExpensesFlow.value) {
+        scope.launch {
+            yearIncome = repository.getIncomeForYear(currentYear)
+            yearExpenses = repository.getExpensesForYear(currentYear)
+            yearNet = repository.getNetProfitForYear(currentYear)
+        }
+    }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Today widget
+        ExpandableProfitWidget(
+            period = ProfitPeriod.TODAY,
+            caption = "Сегодня",
+            profit = todayNet,
+            income = todayIncome,
+            expenses = todayExpenses,
+            isExpanded = expandedCard == ProfitPeriod.TODAY,
+            onToggle = {
+                expandedCard = if (expandedCard == ProfitPeriod.TODAY) null else ProfitPeriod.TODAY
+            },
+            onIncomeClick = {
+                onIncomeDetailClick(
+                    com.clientledger.app.ui.viewmodel.StatsPeriod.DAY,
+                    today,
+                    YearMonth.now(),
+                    today.year
+                )
+            },
+            modifier = Modifier.weight(1f)
+        )
+        
+        // Month widget
+        ExpandableProfitWidget(
+            period = ProfitPeriod.MONTH,
+            caption = "Месяц",
+            profit = monthNet,
+            income = monthIncome,
+            expenses = monthExpenses,
+            isExpanded = expandedCard == ProfitPeriod.MONTH,
+            onToggle = {
+                expandedCard = if (expandedCard == ProfitPeriod.MONTH) null else ProfitPeriod.MONTH
+            },
+            onIncomeClick = {
+                onIncomeDetailClick(
+                    com.clientledger.app.ui.viewmodel.StatsPeriod.MONTH,
+                    LocalDate.now(),
+                    currentMonth,
+                    currentMonth.year
+                )
+            },
+            modifier = Modifier.weight(1f)
+        )
+        
+        // Year widget
+        ExpandableProfitWidget(
+            period = ProfitPeriod.YEAR,
+            caption = "Год",
+            profit = yearNet,
+            income = yearIncome,
+            expenses = yearExpenses,
+            isExpanded = expandedCard == ProfitPeriod.YEAR,
+            onToggle = {
+                expandedCard = if (expandedCard == ProfitPeriod.YEAR) null else ProfitPeriod.YEAR
+            },
+            onIncomeClick = {
+                onIncomeDetailClick(
+                    com.clientledger.app.ui.viewmodel.StatsPeriod.YEAR,
+                    LocalDate.now(),
+                    YearMonth.now(),
+                    currentYear
+                )
+            },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+enum class ProfitPeriod {
+    TODAY, MONTH, YEAR
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ExpandableProfitWidget(
+    period: ProfitPeriod,
+    caption: String,
+    profit: Long,
+    income: Long,
+    expenses: Long,
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+    onIncomeClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val profitColor = when {
+        profit > 0 -> MaterialTheme.colorScheme.primary
+        profit < 0 -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    
+    Card(
+        modifier = modifier
+            .clickable(onClick = onToggle),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Line 1: Caption (Сегодня / Месяц / Год)
+            Text(
+                text = caption,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            
+            // Line 2: Label (Прибыль)
+            Text(
+                text = "Прибыль",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+            
+            // Line 3: Value (amount) - dominant
+            Text(
+                text = MoneyUtils.formatCentsSigned(profit),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = profitColor
+            )
+            
+            // Expanded content (income/expense details)
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    
+                    // Income detail
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Доход:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = MoneyUtils.formatCents(income),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.clickable(onClick = onIncomeClick)
+                        )
+                    }
+                    
+                    // Expense detail
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Расход:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = MoneyUtils.formatCents(expenses),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
         }
     }
 }

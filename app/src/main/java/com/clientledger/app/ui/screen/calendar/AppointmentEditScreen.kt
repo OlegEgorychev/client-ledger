@@ -3,13 +3,17 @@ package com.clientledger.app.ui.screen.calendar
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,7 +34,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.entity.AppointmentEntity
+import com.clientledger.app.data.entity.AppointmentServiceEntity
 import com.clientledger.app.data.entity.ClientEntity
+import com.clientledger.app.data.entity.ServiceTagEntity
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.viewmodel.AppointmentFieldType
 import com.clientledger.app.ui.viewmodel.CalendarViewModel
@@ -54,7 +60,11 @@ fun AppointmentEditScreen(
 ) {
     var selectedDate by remember { mutableStateOf(date) }
     var showDatePicker by remember { mutableStateOf(false) }
-    var title by remember { mutableStateOf("") }
+    // Service tags: selected tag IDs and their prices
+    var selectedServiceTagIds by remember { mutableStateOf<List<Long>>(emptyList()) }
+    var serviceTagPrices by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) } // tagId -> price in cents
+    var availableTags by remember { mutableStateOf<List<ServiceTagEntity>>(emptyList()) }
+    var showTagSelector by remember { mutableStateOf(false) }
     var clientNameText by remember { mutableStateOf("") }
     var selectedClientId by remember { mutableStateOf<Long?>(null) }
     var startHour by remember { mutableStateOf(12) }
@@ -100,6 +110,13 @@ fun AppointmentEditScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     
+    // Load available service tags
+    LaunchedEffect(Unit) {
+        repository.getAllActiveTags().collect { tags ->
+            availableTags = tags
+        }
+    }
+    
     // Проверка пересечений времени (suspend функция, вызывается через LaunchedEffect)
     var hasTimeOverlap by remember { mutableStateOf(false) }
     
@@ -127,11 +144,11 @@ fun AppointmentEditScreen(
     
     // Получаем причину блокировки сохранения и проблемное поле из ViewModel
     val saveDisabledReason = remember(
-        title, clientNameText, selectedClientId, incomeRubles, selectedDate,
+        selectedServiceTagIds, clientNameText, selectedClientId, incomeRubles, selectedDate,
         startHour, startMinute, endHour, endMinute, isTimeRangeValid, hasTimeOverlap
     ) {
         viewModel.getSaveDisabledReason(
-            title = title,
+            selectedServiceTagIds = selectedServiceTagIds,
             clientNameText = clientNameText,
             selectedClientId = selectedClientId,
             incomeRubles = incomeRubles,
@@ -146,11 +163,11 @@ fun AppointmentEditScreen(
     }
     
     val invalidField = remember(
-        title, clientNameText, selectedClientId, incomeRubles, selectedDate,
+        selectedServiceTagIds, clientNameText, selectedClientId, incomeRubles, selectedDate,
         startHour, startMinute, endHour, endMinute, isTimeRangeValid, hasTimeOverlap
     ) {
         viewModel.getInvalidField(
-            title = title,
+            selectedServiceTagIds = selectedServiceTagIds,
             clientNameText = clientNameText,
             selectedClientId = selectedClientId,
             incomeRubles = incomeRubles,
@@ -165,7 +182,7 @@ fun AppointmentEditScreen(
     }
     
     val isSaveEnabled = remember(
-        title, clientNameText, selectedClientId, incomeRubles, selectedDate,
+        selectedServiceTagIds, clientNameText, selectedClientId, incomeRubles, selectedDate,
         startHour, startMinute, endHour, endMinute, isTimeRangeValid, hasTimeOverlap,
         hasClientNameConflict, uiState.isSaving
     ) {
@@ -174,7 +191,7 @@ fun AppointmentEditScreen(
             false
         } else {
             viewModel.isSaveEnabled(
-                title = title,
+                selectedServiceTagIds = selectedServiceTagIds,
                 clientNameText = clientNameText,
                 selectedClientId = selectedClientId,
                 incomeRubles = incomeRubles,
@@ -228,7 +245,11 @@ fun AppointmentEditScreen(
             scope.launch {
                 val appointment = repository.getAppointmentById(appointmentId)
                 appointment?.let {
-                    title = it.title
+                    // Load service tags for this appointment
+                    val services = repository.getServicesForAppointmentSync(appointmentId)
+                    selectedServiceTagIds = services.map { it.serviceTagId }
+                    serviceTagPrices = services.associate { it.serviceTagId to it.priceForThisTag }
+                    
                     selectedClientId = it.clientId
                     val client = repository.getClientById(it.clientId)
                     client?.let {
@@ -286,24 +307,127 @@ fun AppointmentEditScreen(
             ) {
                 // Блокируем все поля во время сохранения
                 val isFormDisabled = uiState.isSaving
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Название *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    placeholder = { Text("Стрижка") },
-                    enabled = !isFormDisabled,
-                    isError = invalidField == AppointmentFieldType.TITLE,
-                    colors = if (invalidField == AppointmentFieldType.TITLE) {
-                        OutlinedTextFieldDefaults.colors(
-                            errorBorderColor = MaterialTheme.colorScheme.error,
-                            errorLabelColor = MaterialTheme.colorScheme.error
-                        )
-                    } else {
-                        OutlinedTextFieldDefaults.colors()
+                
+                // Service Tags Selector
+                Text("Услуги *", style = MaterialTheme.typography.labelSmall)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(isFormDisabled) {
+                            if (!isFormDisabled) {
+                                detectTapGestures {
+                                    showTagSelector = true
+                                }
+                            }
+                        }
+                ) {
+                    OutlinedTextField(
+                        value = if (selectedServiceTagIds.isEmpty()) "" else selectedServiceTagIds.joinToString(", ") { tagId ->
+                            availableTags.find { it.id == tagId }?.name ?: ""
+                        },
+                        onValueChange = { },
+                        readOnly = true,
+                        label = { Text("Выберите услуги") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {
+                                // Intercept all pointer events to prevent TextField from getting focus
+                            },
+                        enabled = false, // Disable to prevent focus
+                        trailingIcon = {
+                            IconButton(onClick = { if (!isFormDisabled) showTagSelector = true }) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Default.ArrowForward,
+                                    contentDescription = "Выбрать услуги"
+                                )
+                            }
+                        },
+                        isError = invalidField == AppointmentFieldType.SERVICES,
+                        colors = if (invalidField == AppointmentFieldType.SERVICES) {
+                            OutlinedTextFieldDefaults.colors(
+                                errorBorderColor = MaterialTheme.colorScheme.error,
+                                errorLabelColor = MaterialTheme.colorScheme.error,
+                                disabledBorderColor = MaterialTheme.colorScheme.error,
+                                disabledLabelColor = MaterialTheme.colorScheme.error
+                            )
+                        } else {
+                            OutlinedTextFieldDefaults.colors()
+                        }
+                    )
+                }
+                
+                // Selected tags as chips with price inputs
+                if (selectedServiceTagIds.isNotEmpty()) {
+                    selectedServiceTagIds.forEach { tagId ->
+                        val tag = availableTags.find { it.id == tagId }
+                        tag?.let {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Tag name chip
+                                FilterChip(
+                                    selected = true,
+                                    onClick = {
+                                        selectedServiceTagIds = selectedServiceTagIds - tagId
+                                        serviceTagPrices = serviceTagPrices - tagId
+                                    },
+                                    label = { Text(it.name) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                
+                                // Price input for this tag
+                                val currentPrice = serviceTagPrices[tagId] ?: 0
+                                val priceRubles = if (currentPrice > 0) MoneyUtils.centsToRubles(currentPrice.toLong()).toString() else ""
+                                var priceText by remember(tagId) { mutableStateOf(priceRubles) }
+                                
+                                OutlinedTextField(
+                                    value = priceText,
+                                    onValueChange = { newValue ->
+                                        if (newValue.all { c -> c.isDigit() || c == '.' || c == ',' }) {
+                                            priceText = newValue
+                                            val priceCents = MoneyUtils.rublesToCents(newValue.replace(',', '.').toDoubleOrNull() ?: 0.0)
+                                            serviceTagPrices = serviceTagPrices + (tagId to priceCents.toInt())
+                                        }
+                                    },
+                                    label = { Text("Цена *") },
+                                    modifier = Modifier.width(120.dp),
+                                    singleLine = true,
+                                    placeholder = { Text("0") },
+                                    enabled = !isFormDisabled
+                                )
+                            }
+                        }
                     }
-                )
+                    
+                    // Total amount (sum of tag prices)
+                    val totalCents = selectedServiceTagIds.sumOf { tagId ->
+                        (serviceTagPrices[tagId] ?: 0).toLong()
+                    }
+                    val totalRubles = MoneyUtils.centsToRubles(totalCents).toString()
+                    
+                    // Update incomeRubles when total changes
+                    LaunchedEffect(totalCents) {
+                        incomeRubles = totalRubles
+                    }
+                }
+                
+                // Tag selector dialog
+                if (showTagSelector) {
+                    ServiceTagSelectorDialog(
+                        availableTags = availableTags,
+                        selectedTagIds = selectedServiceTagIds,
+                        onTagsSelected = { selectedIds ->
+                            selectedServiceTagIds = selectedIds
+                            // Remove prices for deselected tags (user must enter prices manually)
+                            serviceTagPrices = serviceTagPrices.filterKeys { it in selectedIds }
+                        },
+                        onDismiss = { showTagSelector = false }
+                    )
+                }
 
             // Выбор даты
             Text("Дата записи *", style = MaterialTheme.typography.labelSmall)
@@ -676,23 +800,11 @@ fun AppointmentEditScreen(
                 }
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = isPaid,
-                    onCheckedChange = { isPaid = it }
-                )
-                Text("Оплачено")
-            }
-
-
             Button(
                 onClick = {
                     Log.d("AppointmentEdit", "Button onClick triggered")
                     Log.d("AppointmentEdit", "isLoading: $isLoading, isSaveEnabled: $isSaveEnabled")
-                    Log.d("AppointmentEdit", "title: '$title', clientNameText: '$clientNameText', incomeRubles: '$incomeRubles'")
+                    Log.d("AppointmentEdit", "selectedTags: $selectedServiceTagIds, clientNameText: '$clientNameText', incomeRubles: '$incomeRubles'")
                     
                     // Проверка валидности формы
                     if (!isSaveEnabled || uiState.isSaving) {
@@ -736,10 +848,29 @@ fun AppointmentEditScreen(
                                 (24 * 60 - startTotalMinutes) + endTotalMinutes
                             }
                             
+                            // Create services list from selected tags
+                            val services = selectedServiceTagIds.mapIndexed { index, tagId ->
+                                AppointmentServiceEntity(
+                                    appointmentId = appointmentId ?: 0L, // Will be updated after appointment is saved
+                                    serviceTagId = tagId,
+                                    priceForThisTag = serviceTagPrices[tagId] ?: 0,
+                                    sortOrder = index
+                                )
+                            }
+                            
+                            // Generate title from selected tags (for backward compatibility)
+                            val title = if (selectedServiceTagIds.isNotEmpty()) {
+                                selectedServiceTagIds.joinToString(", ") { tagId ->
+                                    availableTags.find { it.id == tagId }?.name ?: ""
+                                }
+                            } else {
+                                "Другое"
+                            }
+                            
                             val appointment = if (appointmentId == null) {
                                 AppointmentEntity(
                                     clientId = clientId,
-                                    title = title,
+                                    title = title, // Keep for backward compatibility
                                     startsAt = startsAt,
                                     dateKey = selectedDate.toDateKey(),
                                     durationMinutes = max(15, durationMinutes), // Минимум 15 минут
@@ -751,7 +882,7 @@ fun AppointmentEditScreen(
                                 AppointmentEntity(
                                     id = appointmentId,
                                     clientId = clientId,
-                                    title = title,
+                                    title = title, // Keep for backward compatibility
                                     startsAt = startsAt,
                                     dateKey = selectedDate.toDateKey(),
                                     durationMinutes = max(15, durationMinutes), // Минимум 15 минут
@@ -763,17 +894,12 @@ fun AppointmentEditScreen(
 
                             Log.d("AppointmentEdit", "Saving appointment: ${if (appointmentId == null) "INSERT" else "UPDATE"}")
                             
-                            if (appointmentId == null) {
-                                viewModel.insertAppointment(appointment)
-                                Log.d("AppointmentEdit", "Appointment inserted successfully")
-                                // Обновляем рабочие дни после добавления записи
-                                viewModel.refreshWorkingDays()
-                            } else {
-                                viewModel.updateAppointment(appointment)
-                                Log.d("AppointmentEdit", "Appointment updated successfully")
-                                // Обновляем рабочие дни после обновления записи
-                                viewModel.refreshWorkingDays()
-                            }
+                            // Save appointment with services
+                            val savedAppointmentId = repository.saveAppointmentWithServices(appointment, services)
+                            Log.d("AppointmentEdit", "Appointment saved successfully with ID: $savedAppointmentId")
+                            
+                            // Обновляем рабочие дни после сохранения записи
+                            viewModel.refreshWorkingDays()
                             
                             Log.d("AppointmentEdit", "Save completed, navigating back")
                             hasTriedToSave = false // Сбрасываем флаг при успешном сохранении
@@ -1120,6 +1246,83 @@ fun DatePickerDayCell(
             else 
                 MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+@Composable
+fun ServiceTagSelectorDialog(
+    availableTags: List<ServiceTagEntity>,
+    selectedTagIds: List<Long>,
+    onTagsSelected: (List<Long>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var currentSelection by remember { mutableStateOf(selectedTagIds.toSet()) }
+    
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Выберите услуги",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(availableTags) { tag ->
+                        val isSelected = currentSelection.contains(tag.id)
+                        
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                currentSelection = if (isSelected) {
+                                    currentSelection - tag.id
+                                } else {
+                                    currentSelection + tag.id
+                                }
+                            },
+                            label = { Text(tag.name) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Отмена")
+                    }
+                    Button(
+                        onClick = {
+                            onTagsSelected(currentSelection.toList())
+                            onDismiss()
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Выбрать")
+                    }
+                }
+            }
+        }
     }
 }
 

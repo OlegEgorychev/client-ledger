@@ -1,22 +1,29 @@
 package com.clientledger.app.data.repository
 
 import com.clientledger.app.data.dao.AppointmentDao
+import com.clientledger.app.data.dao.AppointmentServiceDao
 import com.clientledger.app.data.dao.ClientDao
 import com.clientledger.app.data.dao.ClientIncome
 import com.clientledger.app.data.dao.DayIncome
 import com.clientledger.app.data.dao.DayProfit
 import com.clientledger.app.data.dao.ExpenseDao
+import com.clientledger.app.data.dao.ServiceTagDao
 import com.clientledger.app.data.dao.SummaryStats
+import com.clientledger.app.data.dao.TagIncome
 import com.clientledger.app.data.entity.AppointmentEntity
+import com.clientledger.app.data.entity.AppointmentServiceEntity
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.entity.ExpenseEntity
+import com.clientledger.app.data.entity.ServiceTagEntity
 import com.clientledger.app.data.testdata.TestDataGenerator
 import kotlinx.coroutines.flow.Flow
 
 class LedgerRepository(
     private val clientDao: ClientDao,
     private val appointmentDao: AppointmentDao,
-    private val expenseDao: ExpenseDao
+    private val expenseDao: ExpenseDao,
+    private val serviceTagDao: ServiceTagDao,
+    private val appointmentServiceDao: AppointmentServiceDao
 ) {
     // Clients
     fun getAllClients(): Flow<List<ClientEntity>> = clientDao.getAllClients()
@@ -64,8 +71,11 @@ class LedgerRepository(
     suspend fun updateAppointment(appointment: AppointmentEntity) =
         appointmentDao.updateAppointment(appointment)
     
-    suspend fun deleteAppointment(appointment: AppointmentEntity) =
+    suspend fun deleteAppointment(appointment: AppointmentEntity) {
+        // Delete associated services first (CASCADE should handle this, but explicit for clarity)
+        appointmentServiceDao.deleteServicesForAppointment(appointment.id)
         appointmentDao.deleteAppointment(appointment)
+    }
 
     // Expenses
     fun getExpensesByDate(dateKey: String): Flow<List<ExpenseEntity>> =
@@ -214,6 +224,75 @@ class LedgerRepository(
     suspend fun clearAllTestData() {
         appointmentDao.deleteAllTestAppointments()
         clientDao.deleteAllTestClients()
+    }
+    
+    // Service Tags
+    fun getAllActiveTags(): Flow<List<ServiceTagEntity>> = serviceTagDao.getAllActiveTags()
+    
+    fun getAllTags(): Flow<List<ServiceTagEntity>> = serviceTagDao.getAllTags()
+    
+    suspend fun getTagById(id: Long): ServiceTagEntity? = serviceTagDao.getTagById(id)
+    
+    suspend fun getTagByName(name: String): ServiceTagEntity? = serviceTagDao.getTagByName(name)
+    
+    suspend fun insertTag(tag: ServiceTagEntity): Long = serviceTagDao.insertTag(tag)
+    
+    suspend fun insertTags(tags: List<ServiceTagEntity>) = serviceTagDao.insertTags(tags)
+    
+    suspend fun updateTag(tag: ServiceTagEntity) = serviceTagDao.updateTag(tag)
+    
+    suspend fun deleteTag(tag: ServiceTagEntity) = serviceTagDao.deleteTag(tag)
+    
+    suspend fun setTagActive(id: Long, isActive: Boolean) = serviceTagDao.setTagActive(id, isActive)
+    
+    // Appointment Services (tags for appointments)
+    fun getServicesForAppointment(appointmentId: Long): Flow<List<AppointmentServiceEntity>> =
+        appointmentServiceDao.getServicesForAppointment(appointmentId)
+    
+    suspend fun getServicesForAppointmentSync(appointmentId: Long): List<AppointmentServiceEntity> =
+        appointmentServiceDao.getServicesForAppointmentSync(appointmentId)
+    
+    suspend fun saveAppointmentWithServices(
+        appointment: AppointmentEntity,
+        services: List<AppointmentServiceEntity>
+    ): Long {
+        val appointmentId = if (appointment.id == 0L) {
+            appointmentDao.insertAppointment(appointment)
+        } else {
+            // Delete existing services before updating
+            appointmentServiceDao.deleteServicesForAppointment(appointment.id)
+            appointmentDao.updateAppointment(appointment)
+            appointment.id
+        }
+        
+        // Insert new services with correct appointmentId
+        val servicesWithAppointmentId = services.map { it.copy(appointmentId = appointmentId) }
+        appointmentServiceDao.insertServices(servicesWithAppointmentId)
+        
+        return appointmentId
+    }
+    
+    // Tag-based Statistics
+    suspend fun getIncomeByTag(startDate: String, endDate: String): List<TagIncome> =
+        appointmentServiceDao.getIncomeByTag(startDate, endDate)
+    
+    suspend fun getTopTags(startDate: String, endDate: String, limit: Int = 10): List<TagIncome> =
+        appointmentServiceDao.getTopTags(startDate, endDate, limit)
+    
+    // Initialize default tags (for migration/first run)
+    suspend fun initializeDefaultTags() {
+        // Check if "Другое" tag exists (one of the default tags)
+        val existingTag = serviceTagDao.getTagByName("Другое")
+        
+        if (existingTag == null) {
+            val defaultTags = listOf(
+                ServiceTagEntity(name = "Стрижка", defaultPrice = 0, isActive = true, sortOrder = 1),
+                ServiceTagEntity(name = "Прическа", defaultPrice = 0, isActive = true, sortOrder = 2),
+                ServiceTagEntity(name = "Окрашивание", defaultPrice = 0, isActive = true, sortOrder = 3),
+                ServiceTagEntity(name = "Другое", defaultPrice = 0, isActive = true, sortOrder = 4)
+            )
+            serviceTagDao.insertTags(defaultTags)
+        }
     }
 }
 

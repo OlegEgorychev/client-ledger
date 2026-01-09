@@ -19,7 +19,7 @@ import java.time.YearMonth
  * Типы полей формы для индикации ошибок
  */
 enum class AppointmentFieldType {
-    TITLE,
+    SERVICES, // Replaces TITLE
     CLIENT,
     INCOME,
     DATE,
@@ -246,7 +246,7 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
      * @return текст причины или null, если форма валидна
      */
     fun getSaveDisabledReason(
-        title: String,
+        selectedServiceTagIds: List<Long>, // Replaces title
         clientNameText: String,
         selectedClientId: Long?,
         incomeRubles: String,
@@ -258,9 +258,9 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
         isTimeRangeValid: Boolean,
         hasTimeOverlap: Boolean
     ): String? {
-        // 1. Название услуги
-        if (title.isBlank()) {
-            return "Укажите название услуги."
+        // 1. Услуги (теги)
+        if (selectedServiceTagIds.isEmpty()) {
+            return "Выберите хотя бы одну услугу."
         }
         
         // 2. Клиент
@@ -307,7 +307,7 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
      * @return тип поля или null, если форма валидна
      */
     fun getInvalidField(
-        title: String,
+        selectedServiceTagIds: List<Long>, // Replaces title
         clientNameText: String,
         selectedClientId: Long?,
         incomeRubles: String,
@@ -319,9 +319,9 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
         isTimeRangeValid: Boolean,
         hasTimeOverlap: Boolean
     ): AppointmentFieldType? {
-        // 1. Название услуги
-        if (title.isBlank()) {
-            return AppointmentFieldType.TITLE
+        // 1. Услуги (теги)
+        if (selectedServiceTagIds.isEmpty()) {
+            return AppointmentFieldType.SERVICES
         }
         
         // 2. Клиент
@@ -365,7 +365,7 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
      * @return true если форма валидна и можно сохранить
      */
     fun isSaveEnabled(
-        title: String,
+        selectedServiceTagIds: List<Long>, // Replaces title
         clientNameText: String,
         selectedClientId: Long?,
         incomeRubles: String,
@@ -378,7 +378,7 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
         hasTimeOverlap: Boolean
     ): Boolean {
         return getSaveDisabledReason(
-            title, clientNameText, selectedClientId, incomeRubles,
+            selectedServiceTagIds, clientNameText, selectedClientId, incomeRubles,
             dateSelected, startHour, startMinute, endHour, endMinute,
             isTimeRangeValid, hasTimeOverlap
         ) == null

@@ -33,6 +33,8 @@ import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
@@ -42,6 +44,11 @@ class MainActivity : ComponentActivity() {
         val app = application as LedgerApplication
         val repository = app.repository
         val themePreferences = ThemePreferences(this)
+        
+        // Initialize default service tags on first launch
+        lifecycleScope.launch {
+            repository.initializeDefaultTags()
+        }
 
         setContent {
             val themeMode by themePreferences.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.DARK)

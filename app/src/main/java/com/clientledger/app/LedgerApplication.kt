@@ -10,7 +10,9 @@ class LedgerApplication : Application() {
         LedgerRepository(
             database.clientDao(),
             database.appointmentDao(),
-            database.expenseDao()
+            database.expenseDao(),
+            database.serviceTagDao(),
+            database.appointmentServiceDao()
         )
     }
 }

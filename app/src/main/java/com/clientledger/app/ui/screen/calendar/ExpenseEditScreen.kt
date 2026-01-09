@@ -54,6 +54,13 @@ fun ExpenseEditScreen(
     // BringIntoViewRequester for amount fields
     val amountBringIntoViewRequester = remember { BringIntoViewRequester() }
     
+    // Initialize date from nav arg for new expenses
+    LaunchedEffect(date) {
+        if (expenseId == null) {
+            selectedDate = date
+        }
+    }
+    
     // Load existing expense if editing
     LaunchedEffect(expenseId) {
         if (expenseId != null) {

@@ -46,10 +46,9 @@ import java.time.YearMonth
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(
-    onDateClick: (LocalDate) -> Unit,
-    onAddAppointment: () -> Unit,
-    onAddAppointmentForDate: ((LocalDate) -> Unit)? = null,
-    onAddExpense: () -> Unit,
+    onDateLongClick: (LocalDate) -> Unit, // Long press opens Day Schedule
+    onAddAppointment: (LocalDate) -> Unit, // Pass selected date
+    onAddExpense: (LocalDate) -> Unit, // Pass selected date
     onIncomeDetailClick: ((com.clientledger.app.ui.viewmodel.StatsPeriod, LocalDate, YearMonth, Int) -> Unit)? = null,
     repository: com.clientledger.app.data.repository.LedgerRepository? = null,
     themePreferences: com.clientledger.app.data.preferences.ThemePreferences? = null,
@@ -68,6 +67,7 @@ fun CalendarScreen(
         },
         floatingActionButton = {
             var showAddChooser by remember { mutableStateOf(false) }
+            val selectedDate = uiState.selectedDate ?: LocalDate.now()
             
             FloatingActionButton(onClick = { showAddChooser = true }) {
                 Icon(Icons.Default.Add, contentDescription = "Добавить")
@@ -76,8 +76,8 @@ fun CalendarScreen(
             if (showAddChooser) {
                 AddChooserDialog(
                     onDismiss = { showAddChooser = false },
-                    onAddAppointment = onAddAppointment,
-                    onAddExpense = onAddExpense
+                    onAddAppointment = { onAddAppointment(selectedDate) },
+                    onAddExpense = { onAddExpense(selectedDate) }
                 )
             }
         }
@@ -114,12 +114,12 @@ fun CalendarScreen(
                     workingDays = uiState.workingDays,
                     selectedDate = uiState.selectedDate,
                     onDateClick = { date ->
+                        // Single tap: only select the date (no navigation)
                         viewModel.selectDate(date)
-                        onDateClick(date)
                     },
                     onDateLongClick = { date ->
-                        // Long press opens New Appointment screen with pre-selected date
-                        onAddAppointmentForDate?.invoke(date) ?: onAddAppointment()
+                        // Long press: open Day Schedule for that date
+                        onDateLongClick(date)
                     }
                 )
             }

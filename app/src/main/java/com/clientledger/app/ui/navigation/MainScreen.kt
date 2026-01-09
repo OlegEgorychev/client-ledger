@@ -140,12 +140,18 @@ fun MainScreen(
 
             composable(MainScreenDestination.Calendar.route) {
                 CalendarScreen(
-                    onDateClick = internalOnDateClick,
-                    onAddAppointment = onAddAppointment,
-                    onAddAppointmentForDate = { date ->
+                    onDateLongClick = { date ->
+                        // Long press opens Day Schedule
+                        navController.navigate("day/${date.toString()}")
+                    },
+                    onAddAppointment = { date ->
+                        // Use selected date from calendar, fallback to today if null
                         navController.navigate("appointment_edit/null/${date.toString()}")
                     },
-                    onAddExpense = onAddExpense,
+                    onAddExpense = { date ->
+                        // Use selected date from calendar, fallback to today if null
+                        navController.navigate("expense_edit/null/${date.toString()}")
+                    },
                     onIncomeDetailClick = { period, date, yearMonth, year ->
                         navController.navigate("income_detail/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
                     },

@@ -36,6 +36,7 @@ data class CalendarUiState(
     val dayExpenses: List<ExpenseEntity> = emptyList(),
     val clients: List<ClientEntity> = emptyList(),
     val workingDays: Set<String> = emptySet(), // dateKey для дней с записями
+    val expenseDays: Set<String> = emptySet(), // dateKey для дней с расходами
     val isSaving: Boolean = false,
     val savingMessage: String = ""
 )
@@ -47,12 +48,14 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
     init {
         loadClients()
         loadWorkingDays(_uiState.value.currentMonth)
+        loadExpenseDays(_uiState.value.currentMonth)
     }
 
     fun changeMonth(months: Int) {
         val newMonth = _uiState.value.currentMonth.plusMonths(months.toLong())
         _uiState.value = _uiState.value.copy(currentMonth = newMonth)
         loadWorkingDays(newMonth)
+        loadExpenseDays(newMonth)
     }
 
     private fun loadWorkingDays(month: YearMonth) {
@@ -67,8 +70,21 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
         }
     }
 
+    private fun loadExpenseDays(month: YearMonth) {
+        val firstDay = month.atDay(1)
+        val lastDay = month.atEndOfMonth()
+        val startDateKey = firstDay.toDateKey()
+        val endDateKey = lastDay.toDateKey()
+
+        viewModelScope.launch {
+            val expenseDaysList = repository.getExpenseDaysInRange(startDateKey, endDateKey)
+            _uiState.value = _uiState.value.copy(expenseDays = expenseDaysList.toSet())
+        }
+    }
+
     fun refreshWorkingDays() {
         loadWorkingDays(_uiState.value.currentMonth)
+        loadExpenseDays(_uiState.value.currentMonth)
     }
 
     fun selectDate(date: LocalDate) {

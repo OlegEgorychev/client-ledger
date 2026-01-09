@@ -29,6 +29,14 @@ interface ExpenseDao {
     )
     suspend fun getExpensesForDateRange(startDate: String, endDate: String): Long
 
+    @Query(
+        """
+        SELECT DISTINCT dateKey FROM expenses 
+        WHERE dateKey >= :startDate AND dateKey <= :endDate
+        """
+    )
+    suspend fun getExpenseDaysInRange(startDate: String, endDate: String): List<String>
+
     @Insert
     suspend fun insertExpense(expense: ExpenseEntity): Long
 

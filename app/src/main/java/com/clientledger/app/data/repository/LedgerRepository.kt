@@ -199,6 +199,9 @@ class LedgerRepository(
     suspend fun getWorkingDaysInRange(startDate: String, endDate: String): List<String> =
         appointmentDao.getWorkingDaysInRange(startDate, endDate)
     
+    suspend fun getExpenseDaysInRange(startDate: String, endDate: String): List<String> =
+        expenseDao.getExpenseDaysInRange(startDate, endDate)
+    
     // Phase 1: New aggregation methods
     suspend fun getIncomeSeries(startDate: String, endDate: String): List<DayIncome> =
         appointmentDao.getIncomeSeries(startDate, endDate)

@@ -112,6 +112,7 @@ fun CalendarScreen(
                 CalendarGrid(
                     month = uiState.currentMonth,
                     workingDays = uiState.workingDays,
+                    expenseDays = uiState.expenseDays,
                     selectedDate = uiState.selectedDate,
                     onDateClick = { date ->
                         // Single tap: only select the date (no navigation)
@@ -187,6 +188,7 @@ fun MonthHeader(
 fun CalendarGrid(
     month: YearMonth,
     workingDays: Set<String>,
+    expenseDays: Set<String>,
     selectedDate: LocalDate?,
     onDateClick: (LocalDate) -> Unit,
     onDateLongClick: (LocalDate) -> Unit
@@ -234,6 +236,7 @@ fun CalendarGrid(
                         val isSelected = selectedDate == date
                         val dateKey = date.toDateKey()
                         val hasAppointments = workingDays.contains(dateKey)
+                        val hasExpenses = expenseDays.contains(dateKey)
                         // dayOfWeek: 0 = понедельник, 5 = суббота, 6 = воскресенье
                         val isWeekend = dayOfWeek == 5 || dayOfWeek == 6
                         
@@ -242,6 +245,7 @@ fun CalendarGrid(
                             isToday = isToday,
                             isSelected = isSelected,
                             hasAppointments = hasAppointments,
+                            hasExpenses = hasExpenses,
                             isWeekend = isWeekend,
                             onClick = { onDateClick(date) },
                             onLongClick = { onDateLongClick(date) },
@@ -265,6 +269,7 @@ fun CalendarDayCell(
     isToday: Boolean,
     isSelected: Boolean,
     hasAppointments: Boolean,
+    hasExpenses: Boolean,
     isWeekend: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -280,6 +285,27 @@ fun CalendarDayCell(
             ),
         contentAlignment = Alignment.Center
     ) {
+        // Expense indicator: vertical bar on the left side
+        // Shown for days with expenses, visible even when selected
+        if (hasExpenses) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .width(2.dp)
+                    .fillMaxHeight(0.7f)
+                    .padding(start = 1.dp) // Small padding from edge
+                    .background(
+                        color = if (isSelected) {
+                            // Lighter tint on selected day for visibility
+                            MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                        } else {
+                            MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
+                        },
+                        shape = RoundedCornerShape(1.dp)
+                    )
+            )
+        }
+        
         // Single clear selection marker: filled circle for selected date.
         // If not selected, optionally outline "today" (subtle, secondary).
         val circleModifier = Modifier.fillMaxSize(0.7f)

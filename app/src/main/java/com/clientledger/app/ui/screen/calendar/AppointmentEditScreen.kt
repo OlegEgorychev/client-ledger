@@ -253,7 +253,7 @@ fun AppointmentEditScreen(
                     selectedClientId = it.clientId
                     val client = repository.getClientById(it.clientId)
                     client?.let {
-                        clientNameText = "${it.lastName} ${it.firstName}"
+                        clientNameText = "${it.firstName} ${it.lastName}"
                     }
                     val dateTime = DateUtils.dateTimeToLocalDateTime(it.startsAt)
                     selectedDate = dateTime.toLocalDate()
@@ -522,9 +522,9 @@ fun AppointmentEditScreen(
                 ) {
                     filteredClients.forEach { client ->
                         DropdownMenuItem(
-                            text = { Text("${client.lastName} ${client.firstName}") },
+                            text = { Text("${client.firstName} ${client.lastName}") },
                             onClick = {
-                                clientNameText = "${client.lastName} ${client.firstName}"
+                                clientNameText = "${client.firstName} ${client.lastName}"
                                 selectedClientId = client.id
                                 hasClientNameConflict = false
                                 existingClientId = null
@@ -542,7 +542,7 @@ fun AppointmentEditScreen(
                         scope.launch {
                             val client = repository.getClientById(existingClientId!!)
                             client?.let {
-                                clientNameText = "${it.lastName} ${it.firstName}"
+                                clientNameText = "${it.firstName} ${it.lastName}"
                                 selectedClientId = it.id
                                 hasClientNameConflict = false
                                 existingClientId = null

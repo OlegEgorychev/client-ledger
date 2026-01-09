@@ -305,7 +305,7 @@ fun AppointmentInfoCard(
             client?.let {
                 InfoRow(
                     label = "Клиент",
-                    value = "${it.lastName} ${it.firstName}"
+                    value = "${it.firstName} ${it.lastName}"
                 )
                 it.phone?.takeIf { phone -> phone.isNotBlank() && PhoneUtils.isValidPhoneForCall(phone) }?.let { phone ->
                     PhoneInfoRow(

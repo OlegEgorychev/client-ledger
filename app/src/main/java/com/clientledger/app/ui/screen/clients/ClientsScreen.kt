@@ -144,7 +144,7 @@ fun ClientCard(
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "${client.lastName} ${client.firstName}",
+                    text = "${client.firstName} ${client.lastName}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )

@@ -59,7 +59,7 @@ class DayScheduleViewModel(
                     // Загружаем имена клиентов для каждой записи
                     val appointmentsWithClients = appointments.map { appointment ->
                         val client = repository.getClientById(appointment.clientId)
-                        val clientName = client?.let { "${it.lastName} ${it.firstName}" }
+                        val clientName = client?.let { "${it.firstName} ${it.lastName}" }
                         AppointmentWithClient(
                             appointment = appointment,
                             clientName = clientName

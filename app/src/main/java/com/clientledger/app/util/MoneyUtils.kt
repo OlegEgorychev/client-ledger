@@ -16,6 +16,14 @@ object MoneyUtils {
         return "$formatted ₽"
     }
     
+    fun formatCentsSigned(cents: Long): String {
+        // Format with sign for negative values (e.g., "-1 234 ₽")
+        val rubles = cents / 100
+        val formatted = numberFormat.format(kotlin.math.abs(rubles))
+        val sign = if (cents < 0) "−" else ""
+        return "$sign$formatted ₽"
+    }
+    
     fun formatCentsWithSpaces(cents: Long): String {
         val rubles = cents / 100
         val formatted = numberFormat.format(rubles)

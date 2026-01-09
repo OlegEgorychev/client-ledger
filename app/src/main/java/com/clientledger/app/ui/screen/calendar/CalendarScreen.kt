@@ -125,6 +125,7 @@ fun CalendarScreen(
             // Statistics widgets at the bottom
             Spacer(modifier = Modifier.height(16.dp))
             if (repository != null && onIncomeDetailClick != null) {
+                // Income widgets
                 StatisticsWidgets(
                     repository = repository,
                     onTodayClick = {
@@ -155,6 +156,14 @@ fun CalendarScreen(
                         )
                     }
                 )
+                
+                // Expenses widgets
+                Spacer(modifier = Modifier.height(8.dp))
+                ExpenseWidgets(repository = repository)
+                
+                // Net profit widgets
+                Spacer(modifier = Modifier.height(8.dp))
+                NetProfitWidgets(repository = repository)
             }
             
             // Theme selector (between stats widgets and version)
@@ -667,7 +676,7 @@ fun StatisticsWidgets(
     ) {
         // Today widget
         StatisticsWidget(
-            title = "Сегодня",
+            title = "Доход сегодня",
             value = MoneyUtils.formatCents(todayIncome),
             onClick = onTodayClick,
             modifier = Modifier.weight(1f)
@@ -675,7 +684,7 @@ fun StatisticsWidgets(
         
         // Month widget
         StatisticsWidget(
-            title = "Этот месяц",
+            title = "Доход месяц",
             value = MoneyUtils.formatCents(monthIncome),
             onClick = onMonthClick,
             modifier = Modifier.weight(1f)
@@ -683,7 +692,7 @@ fun StatisticsWidgets(
         
         // Year widget
         StatisticsWidget(
-            title = "Этот год",
+            title = "Доход год",
             value = MoneyUtils.formatCents(yearIncome),
             onClick = onYearClick,
             modifier = Modifier.weight(1f)
@@ -696,6 +705,7 @@ fun StatisticsWidget(
     title: String,
     value: String,
     onClick: () -> Unit,
+    valueColor: Color? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -722,10 +732,209 @@ fun StatisticsWidget(
                 text = value,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                // Keep income readable but not competing with accent (selected day + FAB).
-                color = MaterialTheme.colorScheme.onSurface
+                color = valueColor ?: MaterialTheme.colorScheme.onSurface
             )
         }
+    }
+}
+
+@Composable
+fun ExpenseWidgets(
+    repository: LedgerRepository
+) {
+    val today = LocalDate.now()
+    val currentMonth = YearMonth.now()
+    val currentYear = today.year
+    
+    // Today expenses
+    var todayExpenses by remember { mutableStateOf(0L) }
+    
+    // Month expenses
+    var monthExpenses by remember { mutableStateOf(0L) }
+    
+    // Year expenses
+    var yearExpenses by remember { mutableStateOf(0L) }
+    
+    // Refresh when expenses change - observe expenses flow
+    val todayExpensesFlow = repository.getExpensesByDate(today.toDateKey())
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    val monthExpensesFlow = repository.getExpensesByDateRange(
+        DateUtils.getStartOfMonth(currentMonth).toDateKey(),
+        DateUtils.getEndOfMonth(currentMonth).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    val yearExpensesFlow = repository.getExpensesByDateRange(
+        DateUtils.getStartOfYear(currentYear).toDateKey(),
+        DateUtils.getEndOfYear(currentYear).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    val scope = rememberCoroutineScope()
+    
+    // Load today expenses when date or expenses change
+    LaunchedEffect(today, todayExpensesFlow.value) {
+        scope.launch {
+            todayExpenses = repository.getExpensesForDay(today)
+        }
+    }
+    
+    // Load month expenses when month or expenses change
+    LaunchedEffect(currentMonth, monthExpensesFlow.value) {
+        scope.launch {
+            monthExpenses = repository.getExpensesForMonth(currentYear, currentMonth.monthValue)
+        }
+    }
+    
+    // Load year expenses when year or expenses change
+    LaunchedEffect(currentYear, yearExpensesFlow.value) {
+        scope.launch {
+            yearExpenses = repository.getExpensesForYear(currentYear)
+        }
+    }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Today widget
+        StatisticsWidget(
+            title = "Расход сегодня",
+            value = MoneyUtils.formatCents(todayExpenses),
+            onClick = { },
+            valueColor = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+            modifier = Modifier.weight(1f)
+        )
+        
+        // Month widget
+        StatisticsWidget(
+            title = "Расход месяц",
+            value = MoneyUtils.formatCents(monthExpenses),
+            onClick = { },
+            valueColor = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+            modifier = Modifier.weight(1f)
+        )
+        
+        // Year widget
+        StatisticsWidget(
+            title = "Расход год",
+            value = MoneyUtils.formatCents(yearExpenses),
+            onClick = { },
+            valueColor = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun NetProfitWidgets(
+    repository: LedgerRepository
+) {
+    val today = LocalDate.now()
+    val currentMonth = YearMonth.now()
+    val currentYear = today.year
+    
+    // Today net profit
+    var todayNet by remember { mutableStateOf(0L) }
+    
+    // Month net profit
+    var monthNet by remember { mutableStateOf(0L) }
+    
+    // Year net profit
+    var yearNet by remember { mutableStateOf(0L) }
+    
+    // Refresh when appointments or expenses change
+    val todayAppointments = repository.getAppointmentsByDate(today.toDateKey())
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val todayExpenses = repository.getExpensesByDate(today.toDateKey())
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    val monthAppointments = repository.getAppointmentsByDateRange(
+        DateUtils.getStartOfMonth(currentMonth).toDateKey(),
+        DateUtils.getEndOfMonth(currentMonth).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    val monthExpenses = repository.getExpensesByDateRange(
+        DateUtils.getStartOfMonth(currentMonth).toDateKey(),
+        DateUtils.getEndOfMonth(currentMonth).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    val yearAppointments = repository.getAppointmentsByDateRange(
+        DateUtils.getStartOfYear(currentYear).toDateKey(),
+        DateUtils.getEndOfYear(currentYear).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    val yearExpenses = repository.getExpensesByDateRange(
+        DateUtils.getStartOfYear(currentYear).toDateKey(),
+        DateUtils.getEndOfYear(currentYear).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    val scope = rememberCoroutineScope()
+    
+    // Load today net profit when date or data change
+    LaunchedEffect(today, todayAppointments.value, todayExpenses.value) {
+        scope.launch {
+            todayNet = repository.getNetProfitForDay(today)
+        }
+    }
+    
+    // Load month net profit when month or data change
+    LaunchedEffect(currentMonth, monthAppointments.value, monthExpenses.value) {
+        scope.launch {
+            monthNet = repository.getNetProfitForMonth(currentYear, currentMonth.monthValue)
+        }
+    }
+    
+    // Load year net profit when year or data change
+    LaunchedEffect(currentYear, yearAppointments.value, yearExpenses.value) {
+        scope.launch {
+            yearNet = repository.getNetProfitForYear(currentYear)
+        }
+    }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Today widget
+        StatisticsWidget(
+            title = "Прибыль сегодня",
+            value = MoneyUtils.formatCentsSigned(todayNet),
+            onClick = { },
+            valueColor = when {
+                todayNet > 0 -> MaterialTheme.colorScheme.primary
+                todayNet < 0 -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurface
+            },
+            modifier = Modifier.weight(1f)
+        )
+        
+        // Month widget
+        StatisticsWidget(
+            title = "Прибыль месяц",
+            value = MoneyUtils.formatCentsSigned(monthNet),
+            onClick = { },
+            valueColor = when {
+                monthNet > 0 -> MaterialTheme.colorScheme.primary
+                monthNet < 0 -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurface
+            },
+            modifier = Modifier.weight(1f)
+        )
+        
+        // Year widget
+        StatisticsWidget(
+            title = "Прибыль год",
+            value = MoneyUtils.formatCentsSigned(yearNet),
+            onClick = { },
+            valueColor = when {
+                yearNet > 0 -> MaterialTheme.colorScheme.primary
+                yearNet < 0 -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurface
+            },
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 

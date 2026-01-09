@@ -19,7 +19,10 @@ import com.clientledger.app.data.entity.ExpenseItemEntity
 import com.clientledger.app.data.entity.ExpenseTag
 import com.clientledger.app.data.entity.ServiceTagEntity
 import com.clientledger.app.data.testdata.TestDataGenerator
+import com.clientledger.app.util.DateUtils
+import com.clientledger.app.util.toDateKey
 import kotlinx.coroutines.flow.Flow
+import java.time.LocalDate
 
 class LedgerRepository(
     private val clientDao: ClientDao,
@@ -126,6 +129,63 @@ class LedgerRepository(
     
     suspend fun getExpensesForDateRange(startDate: String, endDate: String): Long =
         expenseDao.getExpensesForDateRange(startDate, endDate)
+    
+    // Income sums by period
+    suspend fun getIncomeForDay(date: LocalDate): Long {
+        val dateKey = date.toDateKey()
+        return getIncomeForDateRange(dateKey, dateKey)
+    }
+    
+    suspend fun getIncomeForMonth(year: Int, month: Int): Long {
+        val yearMonth = java.time.YearMonth.of(year, month)
+        val startDate = DateUtils.getStartOfMonth(yearMonth).toDateKey()
+        val endDate = DateUtils.getEndOfMonth(yearMonth).toDateKey()
+        return getIncomeForDateRange(startDate, endDate)
+    }
+    
+    suspend fun getIncomeForYear(year: Int): Long {
+        val startDate = DateUtils.getStartOfYear(year).toDateKey()
+        val endDate = DateUtils.getEndOfYear(year).toDateKey()
+        return getIncomeForDateRange(startDate, endDate)
+    }
+    
+    // Expense sums by period
+    suspend fun getExpensesForDay(date: LocalDate): Long {
+        val dateKey = date.toDateKey()
+        return getExpensesForDateRange(dateKey, dateKey)
+    }
+    
+    suspend fun getExpensesForMonth(year: Int, month: Int): Long {
+        val yearMonth = java.time.YearMonth.of(year, month)
+        val startDate = DateUtils.getStartOfMonth(yearMonth).toDateKey()
+        val endDate = DateUtils.getEndOfMonth(yearMonth).toDateKey()
+        return getExpensesForDateRange(startDate, endDate)
+    }
+    
+    suspend fun getExpensesForYear(year: Int): Long {
+        val startDate = DateUtils.getStartOfYear(year).toDateKey()
+        val endDate = DateUtils.getEndOfYear(year).toDateKey()
+        return getExpensesForDateRange(startDate, endDate)
+    }
+    
+    // Net profit sums by period
+    suspend fun getNetProfitForDay(date: LocalDate): Long {
+        val income = getIncomeForDay(date)
+        val expenses = getExpensesForDay(date)
+        return income - expenses
+    }
+    
+    suspend fun getNetProfitForMonth(year: Int, month: Int): Long {
+        val income = getIncomeForMonth(year, month)
+        val expenses = getExpensesForMonth(year, month)
+        return income - expenses
+    }
+    
+    suspend fun getNetProfitForYear(year: Int): Long {
+        val income = getIncomeForYear(year)
+        val expenses = getExpensesForYear(year)
+        return income - expenses
+    }
     
     suspend fun getMostProfitableDayByIncome(startDate: String, endDate: String): DayIncome? =
         appointmentDao.getMostProfitableDayByIncome(startDate, endDate)

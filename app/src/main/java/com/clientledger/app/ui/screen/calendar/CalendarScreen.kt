@@ -134,6 +134,15 @@ fun CalendarScreen(
                             currentMonth,
                             currentMonth.year
                         )
+                    },
+                    onYearClick = {
+                        val currentYear = LocalDate.now().year
+                        onIncomeDetailClick(
+                            com.clientledger.app.ui.viewmodel.StatsPeriod.YEAR,
+                            LocalDate.now(),
+                            YearMonth.now(),
+                            currentYear
+                        )
                     }
                 )
             }
@@ -561,16 +570,21 @@ fun ExpenseCard(
 fun StatisticsWidgets(
     repository: LedgerRepository,
     onTodayClick: () -> Unit,
-    onMonthClick: () -> Unit
+    onMonthClick: () -> Unit,
+    onYearClick: () -> Unit
 ) {
     val today = LocalDate.now()
     val currentMonth = YearMonth.now()
+    val currentYear = today.year
     
     // Today income
     var todayIncome by remember { mutableStateOf(0L) }
     
     // Month income
     var monthIncome by remember { mutableStateOf(0L) }
+    
+    // Year income
+    var yearIncome by remember { mutableStateOf(0L) }
     
     // Refresh when appointments change - observe appointments flow
     val todayAppointments = repository.getAppointmentsByDate(today.toDateKey())
@@ -579,6 +593,11 @@ fun StatisticsWidgets(
     val monthAppointments = repository.getAppointmentsByDateRange(
         DateUtils.getStartOfMonth(currentMonth).toDateKey(),
         DateUtils.getEndOfMonth(currentMonth).toDateKey()
+    ).collectAsStateWithLifecycle(initialValue = emptyList())
+    
+    val yearAppointments = repository.getAppointmentsByDateRange(
+        DateUtils.getStartOfYear(currentYear).toDateKey(),
+        DateUtils.getEndOfYear(currentYear).toDateKey()
     ).collectAsStateWithLifecycle(initialValue = emptyList())
     
     // Load today income when date or appointments change
@@ -592,6 +611,13 @@ fun StatisticsWidgets(
         val startDate = DateUtils.getStartOfMonth(currentMonth).toDateKey()
         val endDate = DateUtils.getEndOfMonth(currentMonth).toDateKey()
         monthIncome = repository.getIncomeForDateRange(startDate, endDate)
+    }
+    
+    // Load year income when year or appointments change
+    LaunchedEffect(currentYear, yearAppointments.value) {
+        val startDate = DateUtils.getStartOfYear(currentYear).toDateKey()
+        val endDate = DateUtils.getEndOfYear(currentYear).toDateKey()
+        yearIncome = repository.getIncomeForDateRange(startDate, endDate)
     }
     
     Row(
@@ -613,6 +639,14 @@ fun StatisticsWidgets(
             title = "Этот месяц",
             value = MoneyUtils.formatCents(monthIncome),
             onClick = onMonthClick,
+            modifier = Modifier.weight(1f)
+        )
+        
+        // Year widget
+        StatisticsWidget(
+            title = "Этот год",
+            value = MoneyUtils.formatCents(yearIncome),
+            onClick = onYearClick,
             modifier = Modifier.weight(1f)
         )
     }

@@ -281,17 +281,20 @@ class LedgerRepository(
     
     // Initialize default tags (for migration/first run)
     suspend fun initializeDefaultTags() {
-        // Check if "Другое" tag exists (one of the default tags)
-        val existingTag = serviceTagDao.getTagByName("Другое")
+        val defaultTags = listOf(
+            ServiceTagEntity(name = "Стрижка", defaultPrice = 0, isActive = true, sortOrder = 1),
+            ServiceTagEntity(name = "Прическа", defaultPrice = 0, isActive = true, sortOrder = 2),
+            ServiceTagEntity(name = "Окрашивание", defaultPrice = 0, isActive = true, sortOrder = 3),
+            ServiceTagEntity(name = "Мелирование", defaultPrice = 0, isActive = true, sortOrder = 4),
+            ServiceTagEntity(name = "Тонирование", defaultPrice = 0, isActive = true, sortOrder = 5)
+        )
         
-        if (existingTag == null) {
-            val defaultTags = listOf(
-                ServiceTagEntity(name = "Стрижка", defaultPrice = 0, isActive = true, sortOrder = 1),
-                ServiceTagEntity(name = "Прическа", defaultPrice = 0, isActive = true, sortOrder = 2),
-                ServiceTagEntity(name = "Окрашивание", defaultPrice = 0, isActive = true, sortOrder = 3),
-                ServiceTagEntity(name = "Другое", defaultPrice = 0, isActive = true, sortOrder = 4)
-            )
-            serviceTagDao.insertTags(defaultTags)
+        // Check each tag and insert only if it doesn't exist
+        defaultTags.forEach { tag ->
+            val existingTag = serviceTagDao.getTagByName(tag.name)
+            if (existingTag == null) {
+                serviceTagDao.insertTag(tag)
+            }
         }
     }
 }

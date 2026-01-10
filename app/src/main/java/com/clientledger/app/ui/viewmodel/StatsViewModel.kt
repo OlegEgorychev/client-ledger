@@ -5,7 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.clientledger.app.data.dao.ClientIncome
 import com.clientledger.app.data.dao.DayIncome
 import com.clientledger.app.data.dao.DayProfit
+import com.clientledger.app.data.dao.MonthExpense
+import com.clientledger.app.data.dao.MonthIncome
 import com.clientledger.app.data.dao.SummaryStats
+import com.clientledger.app.data.dao.TagExpense
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.util.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -57,6 +60,12 @@ data class StatsUiState(
     val totalCancellations: Int = 0,
     val cancellationRate: Double = 0.0, // percentage (0-100)
     val cancellationsComparison: CancellationComparison? = null,
+    // Chart data
+    val incomeSeries: List<DayIncome> = emptyList(), // For line chart
+    val incomeByMonth: List<MonthIncome> = emptyList(), // For pie chart (year mode)
+    val incomeByClient: List<ClientIncome> = emptyList(), // For pie chart (top clients)
+    val expensesByMonth: List<MonthExpense> = emptyList(), // For pie chart (expenses by month)
+    val expensesByTag: List<TagExpense> = emptyList(), // For pie chart (expenses by tag)
     val isLoading: Boolean = false
 )
 
@@ -211,6 +220,21 @@ class StatsViewModel(private val repository: LedgerRepository) : ViewModel() {
                 }
             )
 
+            // Load chart data
+            val incomeSeries = repository.getIncomeSeries(startDate, endDate)
+            val incomeByMonth = if (_uiState.value.period == StatsPeriod.YEAR) {
+                repository.getIncomeByMonth(startDate, endDate)
+            } else {
+                emptyList()
+            }
+            val incomeByClient = repository.getIncomeByClient(startDate, endDate)
+            val expensesByMonth = if (_uiState.value.period == StatsPeriod.YEAR) {
+                repository.getExpensesByMonth(startDate, endDate)
+            } else {
+                emptyList()
+            }
+            val expensesByTag = repository.getExpensesByTag(startDate, endDate)
+
             _uiState.value = _uiState.value.copy(
                 income = income,
                 expenses = expenses,
@@ -228,6 +252,12 @@ class StatsViewModel(private val repository: LedgerRepository) : ViewModel() {
                 totalCancellations = totalCancellations,
                 cancellationRate = cancellationRate,
                 cancellationsComparison = cancellationsComparison,
+                // Chart data
+                incomeSeries = incomeSeries,
+                incomeByMonth = incomeByMonth,
+                incomeByClient = incomeByClient,
+                expensesByMonth = expensesByMonth,
+                expensesByTag = expensesByTag,
                 isLoading = false
             )
         }

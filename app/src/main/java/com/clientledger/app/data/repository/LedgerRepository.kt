@@ -8,8 +8,12 @@ import com.clientledger.app.data.dao.DayIncome
 import com.clientledger.app.data.dao.DayProfit
 import com.clientledger.app.data.dao.ExpenseDao
 import com.clientledger.app.data.dao.ExpenseItemDao
+import com.clientledger.app.data.dao.MonthExpense
+import com.clientledger.app.data.dao.MonthIncome
 import com.clientledger.app.data.dao.ServiceTagDao
 import com.clientledger.app.data.dao.SummaryStats
+import com.clientledger.app.data.dao.TagExpense
+import com.clientledger.app.data.dao.TagExpenseRaw
 import com.clientledger.app.data.dao.TagIncome
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.AppointmentServiceEntity
@@ -369,7 +373,27 @@ class LedgerRepository(
         return appointmentId
     }
     
-    // Tag-based Statistics
+    // Income aggregation by periods
+    suspend fun getIncomeByMonth(startDate: String, endDate: String): List<MonthIncome> =
+        appointmentDao.getIncomeByMonth(startDate, endDate)
+    
+    // Expense aggregation by periods
+    suspend fun getExpensesByMonth(startDate: String, endDate: String): List<MonthExpense> =
+        expenseDao.getExpensesByMonth(startDate, endDate)
+    
+    suspend fun getExpensesByTag(startDate: String, endDate: String): List<TagExpense> {
+        val rawResults = expenseDao.getExpensesByTagRaw(startDate, endDate)
+        return rawResults.mapNotNull { raw ->
+            val tag = ExpenseTag.values().find { it.name == raw.tagName }
+            if (tag != null) {
+                TagExpense(tag = tag, totalAmount = raw.totalAmount)
+            } else {
+                null // Skip invalid tags
+            }
+        }
+    }
+    
+    // Tag-based Statistics (for income by service tags)
     suspend fun getIncomeByTag(startDate: String, endDate: String): List<TagIncome> =
         appointmentServiceDao.getIncomeByTag(startDate, endDate)
     

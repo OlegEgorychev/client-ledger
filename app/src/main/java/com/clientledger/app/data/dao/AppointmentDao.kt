@@ -128,6 +128,20 @@ interface AppointmentDao {
     )
     suspend fun getIncomeByClient(startDate: String, endDate: String): List<ClientIncome>
 
+    // Income by month for pie chart (when viewing year)
+    @Query(
+        """
+        SELECT 
+            SUBSTR(dateKey, 1, 7) as monthKey,
+            COALESCE(SUM(incomeCents), 0) as totalIncome
+        FROM appointments 
+        WHERE dateKey >= :startDate AND dateKey <= :endDate AND isPaid = 1 AND status != 'CANCELED'
+        GROUP BY monthKey
+        ORDER BY monthKey ASC
+        """
+    )
+    suspend fun getIncomeByMonth(startDate: String, endDate: String): List<MonthIncome>
+
     // Summary statistics
     @Query(
         """
@@ -352,6 +366,11 @@ data class ClientIncome(
     val clientName: String,
     val totalIncome: Long,
     val visitCount: Int
+)
+
+data class MonthIncome(
+    val monthKey: String, // "YYYY-MM" format
+    val totalIncome: Long
 )
 
 data class SummaryStats(

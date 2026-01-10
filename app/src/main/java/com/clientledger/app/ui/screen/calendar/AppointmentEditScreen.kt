@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
@@ -107,6 +108,7 @@ fun AppointmentEditScreen(
     // Client phone for SMS button
     var clientPhone by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val app = remember { context.applicationContext as? com.clientledger.app.LedgerApplication }
     val backupScheduler = remember(app) { app?.backupScheduler }
     
@@ -648,6 +650,8 @@ fun AppointmentEditScreen(
                                 hasClientNameConflict = false
                                 existingClientId = null
                                 showClientMenu = false
+                                // Закрываем клавиатуру при выборе клиента
+                                keyboardController?.hide()
                             }
                         )
                     }
@@ -666,6 +670,8 @@ fun AppointmentEditScreen(
                                 clientPhone = it.phone
                                 hasClientNameConflict = false
                                 existingClientId = null
+                                // Закрываем клавиатуру при выборе клиента
+                                keyboardController?.hide()
                             }
                         }
                     },

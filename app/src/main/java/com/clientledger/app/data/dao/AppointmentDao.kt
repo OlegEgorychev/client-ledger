@@ -43,6 +43,9 @@ interface AppointmentDao {
 
     @Query("SELECT * FROM appointments WHERE clientId = :clientId ORDER BY startsAt DESC")
     fun getAppointmentsByClient(clientId: Long): Flow<List<AppointmentEntity>>
+    
+    @Query("SELECT * FROM appointments ORDER BY startsAt")
+    suspend fun getAllAppointments(): List<AppointmentEntity>
 
     @Query("SELECT COUNT(*) FROM appointments WHERE clientId = :clientId")
     suspend fun getAppointmentsCountByClient(clientId: Long): Int

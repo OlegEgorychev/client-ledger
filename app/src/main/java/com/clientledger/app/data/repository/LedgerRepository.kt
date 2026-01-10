@@ -26,6 +26,7 @@ import com.clientledger.app.data.testdata.TestDataGenerator
 import com.clientledger.app.util.DateUtils
 import com.clientledger.app.util.toDateKey
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 
 class LedgerRepository(
@@ -332,6 +333,8 @@ class LedgerRepository(
     
     fun getAllTags(): Flow<List<ServiceTagEntity>> = serviceTagDao.getAllTags()
     
+    suspend fun getAllTagsSync(): List<ServiceTagEntity> = serviceTagDao.getAllTagsSync()
+    
     suspend fun getTagById(id: Long): ServiceTagEntity? = serviceTagDao.getTagById(id)
     
     suspend fun getTagByName(name: String): ServiceTagEntity? = serviceTagDao.getTagByName(name)
@@ -371,6 +374,11 @@ class LedgerRepository(
         appointmentServiceDao.insertServices(servicesWithAppointmentId)
         
         return appointmentId
+    }
+    
+    // For backup/restore: insert appointment services directly
+    suspend fun insertAppointmentServices(services: List<AppointmentServiceEntity>) {
+        appointmentServiceDao.insertServices(services)
     }
     
     // Income aggregation by periods
@@ -418,6 +426,31 @@ class LedgerRepository(
             }
         }
     }
+    
+    // Backup/Restore: Get all data
+    suspend fun getAllClientsSync(): List<ClientEntity> = getAllClients().first()
+    suspend fun getAllAppointmentsSync(): List<AppointmentEntity> = appointmentDao.getAllAppointments()
+    suspend fun getAllExpensesSync(): List<ExpenseEntity> = expenseDao.getAllExpenses()
+    suspend fun getAllExpenseItemsSync(): List<ExpenseItemEntity> = expenseItemDao.getAllExpenseItems()
+    suspend fun getAllAppointmentServicesSync(): List<AppointmentServiceEntity> = appointmentServiceDao.getAllAppointmentServices()
+    
+    // Backup/Restore: Clear all data (for restore operation)
+    suspend fun clearAllDataForRestore() {
+        // Delete in reverse order of dependencies to respect foreign keys
+        // 1. Appointment services (depends on appointments and service tags)
+        getAllAppointmentServicesSync().forEach { appointmentServiceDao.deleteService(it) }
+        // 2. Appointments (depends on clients)
+        getAllAppointmentsSync().forEach { deleteAppointment(it) }
+        // 3. Expense items (depends on expenses)
+        getAllExpenseItemsSync().forEach { expenseItemDao.deleteExpenseItem(it) }
+        // 4. Expenses (no dependencies)
+        getAllExpensesSync().forEach { deleteExpense(it) }
+        // 5. Clients (no dependencies, but appointments reference them)
+        getAllClientsSync().forEach { deleteClient(it) }
+        // 6. Service tags (no dependencies, but appointment services reference them)
+        getAllTagsSync().forEach { deleteTag(it) }
+    }
 }
+
 
 

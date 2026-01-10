@@ -1,6 +1,8 @@
 package com.clientledger.app
 
 import android.app.Application
+import android.content.pm.PackageManager
+import com.clientledger.app.data.backup.BackupScheduler
 import com.clientledger.app.data.database.AppDatabase
 import com.clientledger.app.data.preferences.AppPreferences
 import com.clientledger.app.data.repository.LedgerRepository
@@ -24,6 +26,20 @@ class LedgerApplication : Application() {
             database.serviceTagDao(),
             database.appointmentServiceDao()
         )
+    }
+    
+    val backupScheduler by lazy {
+        val appVersion = try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))?.versionName ?: "Unknown"
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getPackageInfo(packageName, 0)?.versionName ?: "Unknown"
+            }
+        } catch (e: Exception) {
+            "Unknown"
+        }
+        BackupScheduler(this, repository, appVersion)
     }
     
     override fun onCreate() {

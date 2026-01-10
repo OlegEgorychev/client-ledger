@@ -21,6 +21,9 @@ interface ExpenseDao {
         """
     )
     fun getExpensesByDateRange(startDate: String, endDate: String): Flow<List<ExpenseEntity>>
+    
+    @Query("SELECT * FROM expenses ORDER BY spentAt")
+    suspend fun getAllExpenses(): List<ExpenseEntity>
 
     @Query(
         """

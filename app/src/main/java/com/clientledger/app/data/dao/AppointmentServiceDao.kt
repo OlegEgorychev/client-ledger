@@ -11,6 +11,9 @@ interface AppointmentServiceDao {
 
     @Query("SELECT * FROM appointment_services WHERE appointmentId = :appointmentId ORDER BY sortOrder ASC")
     suspend fun getServicesForAppointmentSync(appointmentId: Long): List<AppointmentServiceEntity>
+    
+    @Query("SELECT * FROM appointment_services ORDER BY appointmentId, sortOrder")
+    suspend fun getAllAppointmentServices(): List<AppointmentServiceEntity>
 
     @Query("SELECT * FROM appointment_services WHERE serviceTagId = :tagId")
     suspend fun getAppointmentsForTag(tagId: Long): List<AppointmentServiceEntity>

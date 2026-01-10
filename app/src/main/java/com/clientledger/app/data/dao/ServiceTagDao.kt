@@ -11,6 +11,9 @@ interface ServiceTagDao {
 
     @Query("SELECT * FROM service_tags ORDER BY sortOrder ASC, name ASC")
     fun getAllTags(): Flow<List<ServiceTagEntity>>
+    
+    @Query("SELECT * FROM service_tags ORDER BY sortOrder ASC, name ASC")
+    suspend fun getAllTagsSync(): List<ServiceTagEntity>
 
     @Query("SELECT * FROM service_tags WHERE id = :id")
     suspend fun getTagById(id: Long): ServiceTagEntity?

@@ -11,6 +11,9 @@ interface ExpenseItemDao {
     @Query("SELECT * FROM expense_items WHERE expenseId = :expenseId ORDER BY id")
     fun getItemsForExpenseFlow(expenseId: Long): kotlinx.coroutines.flow.Flow<List<ExpenseItemEntity>>
     
+    @Query("SELECT * FROM expense_items ORDER BY id")
+    suspend fun getAllExpenseItems(): List<ExpenseItemEntity>
+    
     @Insert
     suspend fun insertExpenseItem(item: ExpenseItemEntity): Long
     

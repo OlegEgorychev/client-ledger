@@ -25,6 +25,7 @@ import com.clientledger.app.util.NotificationHelper
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import kotlinx.coroutines.flow.combine
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -223,7 +224,142 @@ fun SettingsScreen(
                 }
             }
             
-            // Section 3: Отладка (Debug) - only in debug builds
+            // Section 3: Backup & Restore
+            val app = context.applicationContext as? com.clientledger.app.LedgerApplication
+            val backupScheduler = remember(app) { app?.backupScheduler }
+            val repository = remember(app) { app?.repository }
+            
+            var lastBackupTimestamp by remember { mutableStateOf<String?>(null) }
+            var showRestoreDialog by remember { mutableStateOf(false) }
+            var restoreError by remember { mutableStateOf<String?>(null) }
+            var isBackingUp by remember { mutableStateOf(false) }
+            var isRestoring by remember { mutableStateOf(false) }
+            
+            // Load last backup timestamp
+            LaunchedEffect(backupScheduler) {
+                backupScheduler?.let {
+                    lastBackupTimestamp = it.getLatestBackupTimestamp()
+                }
+            }
+            
+            // Observe last backup timestamp changes
+            val lastBackupTimestampFlow = remember(backupScheduler) {
+                backupScheduler?.lastBackupTimestamp
+            }
+            lastBackupTimestampFlow?.let { flow ->
+                LaunchedEffect(flow) {
+                    flow.collect { timestamp ->
+                        lastBackupTimestamp = timestamp
+                    }
+                }
+            }
+            
+            SettingsSectionCard(title = "Резервное копирование") {
+                // Last backup timestamp
+                lastBackupTimestamp?.let { timestamp ->
+                    SettingsTextRow(
+                        title = "Последний бэкап",
+                        value = try {
+                            java.time.Instant.parse(timestamp)
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+                        } catch (e: Exception) {
+                            timestamp
+                        }
+                    )
+                }
+                
+                // Export backup button
+                SettingsButtonRow(
+                    title = "Экспорт бэкапа",
+                    description = "Сохранить текущую копию данных для передачи на другое устройство",
+                    buttonText = "Экспортировать",
+                    enabled = !isBackingUp && repository != null && backupScheduler != null,
+                    onClick = {
+                        scope.launch {
+                            isBackingUp = true
+                            restoreError = null
+                            try {
+                                val result = backupScheduler?.performBackupNow()
+                                result?.onSuccess { backupFile ->
+                                    try {
+                                        // Share the backup file using FileProvider
+                                        val fileUri = androidx.core.content.FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            backupFile
+                                        )
+                                        val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                            type = "application/json"
+                                            putExtra(android.content.Intent.EXTRA_STREAM, fileUri)
+                                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Backup ${backupFile.name}")
+                                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(android.content.Intent.createChooser(shareIntent, "Экспортировать бэкап"))
+                                        restoreError = null
+                                    } catch (e: Exception) {
+                                        restoreError = "Не удалось поделиться файлом: ${e.message}"
+                                    }
+                                }?.onFailure { error ->
+                                    restoreError = "Не удалось создать бэкап: ${error.message}"
+                                }
+                            } catch (e: Exception) {
+                                restoreError = "Ошибка: ${e.message}"
+                            } finally {
+                                isBackingUp = false
+                            }
+                        }
+                    }
+                )
+                
+                // Restore backup button
+                SettingsButtonRow(
+                    title = "Восстановить из файла",
+                    description = "Загрузить данные из сохранённого бэкапа (заменит текущие данные)",
+                    buttonText = "Восстановить",
+                    enabled = !isRestoring && !isBackingUp && repository != null && backupScheduler != null,
+                    onClick = {
+                        showRestoreDialog = true
+                    }
+                )
+                
+                // Show error if any
+                restoreError?.let { error ->
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+            
+            // Restore confirmation dialog
+            if (showRestoreDialog) {
+                AlertDialog(
+                    onDismissRequest = { showRestoreDialog = false },
+                    title = { Text("Восстановление данных") },
+                    text = { Text("Это действие заменит все текущие данные данными из бэкапа. Продолжить?") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showRestoreDialog = false
+                                // TODO: Implement file picker for restore
+                                restoreError = "Функция восстановления в разработке. Используйте системный файловый менеджер для выбора файла."
+                            }
+                        ) {
+                            Text("Восстановить")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showRestoreDialog = false }) {
+                            Text("Отмена")
+                        }
+                    }
+                )
+            }
+            
+            // Section 4: Отладка (Debug) - only in debug builds
             val isDebug = remember {
                 try {
                     val applicationInfo = context.packageManager.getApplicationInfo(context.packageName, 0)
@@ -250,6 +386,42 @@ fun SettingsScreen(
                         }
                     )
                     
+                    // Manual backup trigger (debug only)
+                    if (backupScheduler != null) {
+                        SettingsButtonRow(
+                            title = "Создать бэкап сейчас",
+                            description = "DEBUG: Принудительно создать бэкап (для тестирования)",
+                            buttonText = "Создать бэкап",
+                            enabled = !isBackingUp,
+                            onClick = {
+                                scope.launch {
+                                    isBackingUp = true
+                                    restoreError = null
+                                    try {
+                                        val result = backupScheduler.performBackupNow()
+                                        result.onSuccess {
+                                            restoreError = "Бэкап создан успешно!"
+                                        }.onFailure { error ->
+                                            restoreError = "Ошибка: ${error.message}"
+                                        }
+                                    } catch (e: Exception) {
+                                        restoreError = "Ошибка: ${e.message}"
+                                    } finally {
+                                        isBackingUp = false
+                                    }
+                                }
+                            }
+                        )
+                        
+                        // Show last backup timestamp (debug)
+                        lastBackupTimestamp?.let { timestamp ->
+                            SettingsTextRow(
+                                title = "Время последнего бэкапа",
+                                value = timestamp
+                            )
+                        }
+                    }
+                    
                     // Debug daily reminder toggle (separate from production toggle)
                     SettingsSwitchRow(
                         title = "Ежедневные напоминания о завтрашнем расписании",
@@ -269,7 +441,7 @@ fun SettingsScreen(
                 }
             }
             
-            // Section 4: О приложении (About) - Version at bottom
+            // Section 5: О приложении (About) - Version at bottom
             SettingsSectionCard(title = "О приложении") {
                 SettingsTextRow(
                     title = "Версия",

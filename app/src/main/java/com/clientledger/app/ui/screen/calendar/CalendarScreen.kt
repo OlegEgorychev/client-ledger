@@ -96,57 +96,64 @@ fun CalendarScreen(
         }
     ) { paddingValues ->
         val scrollState = rememberScrollState()
-        Column(
+        // Base layer: Screen background using theme background color
+        Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                // Reserve space for FAB so bottom widgets don't overlap with the "+" button
-                .padding(bottom = 88.dp)
-                // Make the whole screen scrollable for small heights / large fontScale
-                .verticalScroll(scrollState)
+                .padding(paddingValues),
+            color = MaterialTheme.colorScheme.background
         ) {
-            // Навигация по месяцам
-            MonthHeader(
-                month = uiState.currentMonth,
-                onPreviousMonth = { viewModel.changeMonth(-1) },
-                onNextMonth = { viewModel.changeMonth(1) }
-            )
-
-            // Календарная сетка в Card для лучшей читаемости
-            Card(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    .fillMaxSize()
+                    // Reserve space for FAB so bottom widgets don't overlap with the "+" button
+                    .padding(bottom = 88.dp)
+                    // Make the whole screen scrollable for small heights / large fontScale
+                    .verticalScroll(scrollState)
             ) {
-                CalendarGrid(
+                // Навигация по месяцам
+                MonthHeader(
                     month = uiState.currentMonth,
-                    workingDays = uiState.workingDays,
-                    expenseDays = uiState.expenseDays,
-                    selectedDate = uiState.selectedDate,
-                    onDateClick = { date ->
-                        // Single tap: only select the date (no navigation)
-                        viewModel.selectDate(date)
-                    },
-                    onDateLongClick = { date ->
-                        // Long press: open Day Schedule for that date
-                        onDateLongClick(date)
-                    }
+                    onPreviousMonth = { viewModel.changeMonth(-1) },
+                    onNextMonth = { viewModel.changeMonth(1) }
                 )
+
+                // Primary interactive layer: Calendar container
+                // Clearly stands out from background with white background and 4dp elevation
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFFFFFFF) // Pure white #FFFFFF
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
+                    CalendarGrid(
+                        month = uiState.currentMonth,
+                        workingDays = uiState.workingDays,
+                        expenseDays = uiState.expenseDays,
+                        selectedDate = uiState.selectedDate,
+                        onDateClick = { date ->
+                            // Single tap: only select the date (no navigation)
+                            viewModel.selectDate(date)
+                        },
+                        onDateLongClick = { date ->
+                            // Long press: open Day Schedule for that date
+                            onDateLongClick(date)
+                        }
+                    )
+                }
+                
+                // Strongest layer: Profit widgets (expandable with income/expense details)
+                Spacer(modifier = Modifier.height(16.dp))
+                if (repository != null && onIncomeDetailClick != null) {
+                    ExpandableProfitWidgets(
+                        repository = repository,
+                        onIncomeDetailClick = onIncomeDetailClick
+                    )
+                }
             }
-            
-            // Profit widgets (expandable with income/expense details)
-            Spacer(modifier = Modifier.height(16.dp))
-            if (repository != null && onIncomeDetailClick != null) {
-                ExpandableProfitWidgets(
-                    repository = repository,
-                    onIncomeDetailClick = onIncomeDetailClick
-                )
-            }
-            
         }
     }
 }
@@ -937,21 +944,32 @@ fun ExpandableProfitWidget(
 ) {
     val profitColorValue = profitColor(profit, MaterialTheme.colorScheme)
     
-    Card(
+    // Strongest layer: Profit cards - most visually prominent with 8dp elevation and optional border
+    Box(
         modifier = modifier
-            .clickable(onClick = onToggle),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = Color(0xFFE3E6EF), // Subtle outline #E3E6EF
+                shape = MaterialTheme.shapes.medium
+            )
+            .clickable(onClick = onToggle)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.Start,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFFFFFFFF) // Pure white #FFFFFF
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+            shape = MaterialTheme.shapes.medium
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.Start,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
             // Line 1: Caption (Сегодня / Месяц / Год)
             Text(
                 text = caption,
@@ -1030,6 +1048,7 @@ fun ExpandableProfitWidget(
                         )
                     }
                 }
+            }
             }
         }
     }

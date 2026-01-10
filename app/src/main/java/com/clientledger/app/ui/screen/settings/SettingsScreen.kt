@@ -357,7 +357,13 @@ private fun SettingsSwitchRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            enabled = enabled
+            enabled = enabled,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.surface,
+                checkedTrackColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                uncheckedTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+            )
         )
     }
 }
@@ -446,7 +452,12 @@ private fun ThemeSelectorRow(
                 selected = themeMode == ThemeMode.LIGHT,
                 onClick = { onThemeModeChange(ThemeMode.LIGHT) },
                 label = { Text("Светлая") },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                    selectedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
+                )
             )
             
             // Dark theme option
@@ -454,7 +465,12 @@ private fun ThemeSelectorRow(
                 selected = themeMode == ThemeMode.DARK,
                 onClick = { onThemeModeChange(ThemeMode.DARK) },
                 label = { Text("Тёмная") },
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                    selectedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
+                )
             )
         }
     }

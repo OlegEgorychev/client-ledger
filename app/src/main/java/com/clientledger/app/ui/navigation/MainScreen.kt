@@ -147,16 +147,23 @@ fun MainScreen(
         bottomBar = {
             NavigationBar {
                 destinations.forEach { destination ->
+                    val isSelected = when {
+                        currentRoute == destination.route -> true
+                        // Treat Day screen as part of Calendar tab
+                        destination == MainScreenDestination.Calendar &&
+                            (currentRoute?.startsWith("day/") == true || currentRoute?.startsWith("sms_reminders/") == true) -> true
+                        else -> false
+                    }
+                    
                     NavigationBarItem(
                         icon = { Icon(destination.icon, contentDescription = destination.title) },
                         label = { Text(destination.title) },
-                        selected = when {
-                            currentRoute == destination.route -> true
-                            // Treat Day screen as part of Calendar tab
-                            destination == MainScreenDestination.Calendar &&
-                                (currentRoute?.startsWith("day/") == true || currentRoute?.startsWith("sms_reminders/") == true) -> true
-                            else -> false
-                        },
+                        selected = isSelected,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
+                            selectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
+                            indicatorColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                        ),
                         onClick = {
                             // Если уже на этой вкладке, ничего не делаем
                             if (currentRoute != destination.route) {

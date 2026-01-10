@@ -26,11 +26,11 @@ val DarkSurface = Color(0xFF121629)     // Dark surface
 val DarkSurfaceVariant = Color(0xFF1A1F3A) // Dark surface variant
 
 // Background - Light theme (Soft Indigo Finance palette)
-val LightBackground = Color(0xFFF6F7FB)  // Soft indigo-tinted background
+val LightBackground = Color(0xFFF4F6FB)  // Very light cool gray - clearly darker than blocks
 val LightSurface = Color(0xFFFFFFFF)      // Pure white for cards and surfaces
 val LightSurfaceVariant = Color(0xFFF1F3F5) // Slightly darker gray for better separation
 val LightOutline = Color(0xFFE5E7EB)     // Soft outline color
-val LightOutlineVariant = Color(0xFFE5E7EB) // Outline variant
+val LightOutlineVariant = Color(0xFFE3E6EF) // Outline variant for card borders (#E3E6EF)
 
 // Soft Indigo Finance palette colors
 val SoftIndigoPrimary = Color(0xFF4F5DFF)      // Main accent color

@@ -450,6 +450,17 @@ class LedgerRepository(
         // 6. Service tags (no dependencies, but appointment services reference them)
         getAllTagsSync().forEach { deleteTag(it) }
     }
+    
+    /**
+     * Check if database is empty (no clients, appointments, expenses).
+     * Used to determine if automatic restore from Google Drive should be offered.
+     */
+    suspend fun isDatabaseEmpty(): Boolean {
+        val clientsCount = getAllClientsSync().size
+        val appointmentsCount = getAllAppointmentsSync().size
+        val expensesCount = getAllExpensesSync().size
+        return clientsCount == 0 && appointmentsCount == 0 && expensesCount == 0
+    }
 }
 
 

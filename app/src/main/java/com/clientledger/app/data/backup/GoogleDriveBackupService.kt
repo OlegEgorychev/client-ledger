@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 import com.google.android.gms.tasks.Tasks
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "GoogleDriveBackupService"
@@ -173,6 +174,118 @@ class GoogleDriveBackupService(private val context: Context) {
     }
     
     /**
+     * Get list of backup files from Google Drive.
+     * Returns list of file IDs sorted by creation time (newest first).
+     */
+    suspend fun listBackupsFromDrive(): Result<List<BackupFileInfo>> = withContext(Dispatchers.IO) {
+        try {
+            val account = GoogleSignIn.getLastSignedInAccount(context)
+                ?: return@withContext Result.failure(Exception("Not signed in to Google"))
+            
+            val hasDriveScope = account.grantedScopes?.contains(Scope(DriveScopes.DRIVE_FILE)) == true
+            if (!hasDriveScope) {
+                return@withContext Result.failure(Exception("Drive scope not granted"))
+            }
+            
+            // Create Drive service
+            val credential = GoogleAccountCredential.usingOAuth2(context, driveScopes)
+            credential.selectedAccount = account.account
+            
+            val driveService = Drive.Builder(
+                AndroidHttp.newCompatibleTransport(),
+                GsonFactory.getDefaultInstance(),
+                credential
+            )
+                .setApplicationName("Client Ledger")
+                .build()
+            
+            // Find backup folder
+            val folderId = findOrCreateBackupFolder(driveService)
+            
+            // List all backup files in the folder
+            val query = "parents in '$folderId' and name contains 'backup_' and name endsWith '.json' and trashed=false"
+            val result = driveService.files().list()
+                .setQ(query)
+                .setOrderBy("createdTime desc") // Newest first
+                .setFields("files(id, name, createdTime, modifiedTime)")
+                .execute()
+            
+            val files = result.files ?: emptyList()
+            val backupFiles = files.map { file ->
+                BackupFileInfo(
+                    fileId = file.id,
+                    fileName = file.name,
+                    createdTime = file.createdTime?.value ?: 0L,
+                    modifiedTime = file.modifiedTime?.value ?: 0L
+                )
+            }
+            
+            Log.d(TAG, "Found ${backupFiles.size} backup files in Drive")
+            Result.success(backupFiles)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to list backups from Drive", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Download the latest backup file from Google Drive.
+     * @return Result with local file path
+     */
+    suspend fun downloadLatestBackupFromDrive(): Result<File> = withContext(Dispatchers.IO) {
+        try {
+            // Get list of backups
+            val backupsResult = listBackupsFromDrive()
+            val backups = backupsResult.getOrNull() ?: return@withContext Result.failure(Exception("No backups found in Drive"))
+            
+            if (backups.isEmpty()) {
+                return@withContext Result.failure(Exception("No backup files found in Google Drive"))
+            }
+            
+            // Get the latest backup (first in list, sorted by creation time desc)
+            val latestBackup = backups[0]
+            
+            val account = GoogleSignIn.getLastSignedInAccount(context)
+                ?: return@withContext Result.failure(Exception("Not signed in to Google"))
+            
+            // Create Drive service
+            val credential = GoogleAccountCredential.usingOAuth2(context, driveScopes)
+            credential.selectedAccount = account.account
+            
+            val driveService = Drive.Builder(
+                AndroidHttp.newCompatibleTransport(),
+                GsonFactory.getDefaultInstance(),
+                credential
+            )
+                .setApplicationName("Client Ledger")
+                .build()
+            
+            // Download file
+            val outputDir = File(context.cacheDir, "drive_backups").apply {
+                if (!exists()) mkdirs()
+            }
+            val outputFile = File(outputDir, latestBackup.fileName)
+            
+            val fileContent = driveService.files().get(latestBackup.fileId)
+                .executeMediaAsInputStream()
+            
+            FileOutputStream(outputFile).use { output ->
+                fileContent.use { input ->
+                    input.copyTo(output)
+                }
+            }
+            
+            Log.d(TAG, "Downloaded backup from Drive: ${outputFile.absolutePath}")
+            Result.success(outputFile)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to download backup from Drive", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
      * Sign out from Google account.
      */
     suspend fun signOut() = withContext(Dispatchers.Main) {
@@ -183,4 +296,14 @@ class GoogleDriveBackupService(private val context: Context) {
             Log.e(TAG, "Failed to sign out", e)
         }
     }
+    
+    /**
+     * Data class for backup file info from Google Drive.
+     */
+    data class BackupFileInfo(
+        val fileId: String,
+        val fileName: String,
+        val createdTime: Long,
+        val modifiedTime: Long
+    )
 }

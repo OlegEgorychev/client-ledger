@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.clientledger.app.LedgerApplication
 import com.clientledger.app.data.backup.BackupRepository
+import com.clientledger.app.data.backup.BackupScheduler
+import com.clientledger.app.data.backup.GoogleDriveBackupService
 import com.clientledger.app.data.preferences.AppPreferences
 import com.clientledger.app.data.preferences.ThemePreferences
 import com.clientledger.app.ui.theme.ThemeMode
@@ -267,6 +269,52 @@ fun SettingsScreen(
                         isGoogleSignedIn = true
                         googleAccountEmail = account.email
                         Toast.makeText(context, "Вход выполнен: ${account.email}", Toast.LENGTH_SHORT).show()
+                        
+                        // Check if database is empty and offer to restore from Drive
+                        scope.launch {
+                            val isDatabaseEmpty = repository?.isDatabaseEmpty() == true
+                            if (isDatabaseEmpty && repository != null && backupScheduler != null) {
+                                // Check if there are backups in Drive
+                                val backupsResult = service.listBackupsFromDrive()
+                                backupsResult.onSuccess { backups ->
+                                    if (backups.isNotEmpty()) {
+                                        // Show dialog offering restore - will be handled by the restore function
+                                        android.app.AlertDialog.Builder(context)
+                                            .setTitle("Восстановить из Google Drive?")
+                                            .setMessage("База данных пуста. Обнаружен бэкап в Google Drive (${backups[0].fileName}). Восстановить данные?")
+                                            .setPositiveButton("Восстановить") { _, _ ->
+                                                scope.launch {
+                                                    // Download and restore
+                                                    val downloadResult = service.downloadLatestBackupFromDrive()
+                                                    downloadResult.onSuccess { backupFile ->
+                                                        try {
+                                                            val backupRepository = BackupRepository(context, repository)
+                                                            val backupResult = backupRepository.readBackup(backupFile)
+                                                            backupResult.onSuccess { payload ->
+                                                                val restoreResult = backupRepository.restoreFromBackup(payload)
+                                                                restoreResult.onSuccess {
+                                                                    Toast.makeText(context, "Данные успешно восстановлены из Google Drive", Toast.LENGTH_SHORT).show()
+                                                                    lastBackupTimestamp = backupScheduler.getLatestBackupTimestamp()
+                                                                }.onFailure { error ->
+                                                                    Toast.makeText(context, "Ошибка восстановления: ${error.message}", Toast.LENGTH_LONG).show()
+                                                                }
+                                                            }.onFailure { error ->
+                                                                Toast.makeText(context, "Ошибка чтения бэкапа: ${error.message}", Toast.LENGTH_LONG).show()
+                                                            }
+                                                        } finally {
+                                                            backupFile.delete()
+                                                        }
+                                                    }.onFailure { error ->
+                                                        Toast.makeText(context, "Не удалось загрузить бэкап: ${error.message}", Toast.LENGTH_LONG).show()
+                                                    }
+                                                }
+                                            }
+                                            .setNegativeButton("Отмена", null)
+                                            .show()
+                                    }
+                                }
+                            }
+                        }
                     } catch (e: ApiException) {
                         isGoogleSignedIn = false
                         googleAccountEmail = null
@@ -400,6 +448,72 @@ fun SettingsScreen(
                         }
                     }
                 )
+                
+                // Restore from Google Drive button (only if signed in)
+                if (isGoogleSignedIn && googleDriveService != null && repository != null && backupScheduler != null) {
+                    SettingsButtonRow(
+                        title = "Восстановить из Google Drive",
+                        description = "Загрузить последний бэкап из Google Drive (заменит текущие данные)",
+                        buttonText = "Восстановить",
+                        enabled = !isRestoring && !isBackingUp,
+                        onClick = {
+                            scope.launch {
+                                isRestoring = true
+                                restoreError = null
+                                try {
+                                    // Download latest backup from Drive
+                                    val downloadResult = googleDriveService!!.downloadLatestBackupFromDrive()
+                                    downloadResult.onSuccess { backupFile ->
+                                        try {
+                                            // Read backup from downloaded file
+                                            val backupRepository = BackupRepository(context, repository!!)
+                                            val backupResult = backupRepository.readBackup(backupFile)
+                                            backupResult.onSuccess { payload ->
+                                                // Confirm restore
+                                                android.app.AlertDialog.Builder(context)
+                                                    .setTitle("Восстановление данных")
+                                                    .setMessage("Это действие заменит все текущие данные данными из бэкапа. Продолжить?")
+                                                    .setPositiveButton("Восстановить") { _, _ ->
+                                                        scope.launch {
+                                                            val restoreResult = backupRepository.restoreFromBackup(payload)
+                                                            restoreResult.onSuccess {
+                                                                Toast.makeText(context, "Данные успешно восстановлены из Google Drive", Toast.LENGTH_SHORT).show()
+                                                                restoreError = null
+                                                                // Refresh backup timestamp
+                                                                lastBackupTimestamp = backupScheduler!!.getLatestBackupTimestamp()
+                                                            }.onFailure { error ->
+                                                                restoreError = "Ошибка восстановления: ${error.message ?: "Неизвестная ошибка"}"
+                                                            }
+                                                            isRestoring = false
+                                                        }
+                                                    }
+                                                    .setNegativeButton("Отмена") { _, _ ->
+                                                        isRestoring = false
+                                                    }
+                                                    .setOnCancelListener {
+                                                        isRestoring = false
+                                                    }
+                                                    .show()
+                                            }.onFailure { error ->
+                                                restoreError = "Не удалось прочитать бэкап: ${error.message ?: "Неизвестная ошибка"}"
+                                                isRestoring = false
+                                            }
+                                        } finally {
+                                            // Clean up downloaded file
+                                            backupFile.delete()
+                                        }
+                                    }.onFailure { error ->
+                                        restoreError = "Не удалось загрузить бэкап из Google Drive: ${error.message ?: "Неизвестная ошибка"}"
+                                        isRestoring = false
+                                    }
+                                } catch (e: Exception) {
+                                    restoreError = "Ошибка: ${e.message ?: "Неизвестная ошибка"}"
+                                    isRestoring = false
+                                }
+                            }
+                        }
+                    )
+                }
                 
                 // Restore backup button
                 SettingsButtonRow(

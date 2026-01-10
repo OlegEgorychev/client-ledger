@@ -28,7 +28,6 @@ import android.content.Context
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Formats service tags for SMS message according to rules:
@@ -221,16 +220,6 @@ fun SmsReminderScreen(
         )
     }
     
-    // Map of appointment ID to selected state (for bulk action only)
-    var selectedAppointments by remember {
-        mutableStateOf<Set<Long>>(emptySet())
-    }
-    
-    // Track if bulk mode is enabled
-    var showBulkMode by remember {
-        mutableStateOf(false)
-    }
-    
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -242,97 +231,6 @@ fun SmsReminderScreen(
                     }
                 }
             )
-        },
-        bottomBar = {
-            if (appointments.isNotEmpty() && showBulkMode && appointments.size > 1) {
-                BottomAppBar {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { showBulkMode = false },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Отмена")
-                        }
-                        Button(
-                            onClick = {
-                                val selected = appointments.filter { it.appointmentId in selectedAppointments }
-                                android.util.Log.d("SmsReminderScreen", "Отправить всем нажата. Выбрано записей: ${selected.size}")
-                                
-                                val successCount = AtomicInteger(0)
-                                val errorCount = AtomicInteger(0)
-                                
-                            scope.launch {
-                                selected.forEachIndexed { index, appointment ->
-                                    // Use the same sendSmsForAppointment function for consistency
-                                    // Create a temporary snackbar state to track individual results
-                                    // For bulk action, we'll show a summary at the end
-                                    
-                                    val phone = appointment.clientPhone
-                                    if (!phone.isNullOrBlank()) {
-                                        // Send SMS for this appointment
-                                        // We skip showing individual snackbars for bulk action
-                                        val success = try {
-                                            sendSmsForAppointment(
-                                                context = context,
-                                                repository = repository,
-                                                appointment = appointment,
-                                                tomorrowDate = tomorrowDate,
-                                                messageTemplate = messageTemplate.text,
-                                                snackbarHostState = snackbarHostState,
-                                                suppressSnackbar = true // Suppress individual snackbars for bulk action
-                                            )
-                                        } catch (e: Exception) {
-                                            android.util.Log.e("SmsReminderScreen", "Ошибка при отправке SMS для ${appointment.clientName}", e)
-                                            false
-                                        }
-                                        
-                                        if (success) {
-                                            successCount.incrementAndGet()
-                                        } else {
-                                            errorCount.incrementAndGet()
-                                        }
-                                        
-                                        // Небольшая задержка между открытием SMS приложений (только если не последнее)
-                                        if (index < selected.size - 1) {
-                                            kotlinx.coroutines.delay(500)
-                                        }
-                                    } else {
-                                        android.util.Log.w("SmsReminderScreen", "Пропуск записи ${appointment.clientName}: нет телефона")
-                                        errorCount.incrementAndGet()
-                                    }
-                                }
-                                
-                                // Show summary after all appointments are processed
-                                if (successCount.get() > 0) {
-                                    snackbarHostState.showSnackbar(
-                                        message = "Открыто SMS приложений: ${successCount.get()}",
-                                        duration = SnackbarDuration.Short
-                                    )
-                                } else if (errorCount.get() > 0) {
-                                    snackbarHostState.showSnackbar(
-                                        message = "Не удалось открыть SMS приложения",
-                                        duration = SnackbarDuration.Long
-                                    )
-                                }
-                                
-                                // Reset bulk mode after sending
-                                showBulkMode = false
-                                selectedAppointments = emptySet()
-                            }
-                            },
-                            modifier = Modifier.weight(2f),
-                            enabled = selectedAppointments.isNotEmpty()
-                        ) {
-                            Text("Отправить всем (${selectedAppointments.size})")
-                        }
-                    }
-                }
-            }
         }
     ) { paddingValues ->
         Column(
@@ -382,20 +280,6 @@ fun SmsReminderScreen(
                     }
                 }
                 
-                // Bulk mode toggle button (only if multiple appointments)
-                if (appointments.size > 1 && !showBulkMode) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { showBulkMode = true }) {
-                            Text("Отправить всем")
-                        }
-                    }
-                }
-                
                 // Appointments list
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth(),
@@ -409,85 +293,63 @@ fun SmsReminderScreen(
                         )
                         val formattedTime = time.format(DateTimeFormatter.ofPattern("HH:mm"))
                         val hasPhone = !appointment.clientPhone.isNullOrBlank()
-                        val isSelected = appointment.appointmentId in selectedAppointments
                         
                         Card(
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.Top
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = appointment.clientName,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "$formattedTime - ${appointment.title}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    if (appointment.clientPhone != null) {
                                         Text(
-                                            text = appointment.clientName,
-                                            style = MaterialTheme.typography.bodyLarge
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = "$formattedTime - ${appointment.title}",
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            text = appointment.clientPhone,
+                                            style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        if (appointment.clientPhone != null) {
-                                            Text(
-                                                text = appointment.clientPhone,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        } else {
-                                            Text(
-                                                text = "Нет номера",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                                                fontStyle = FontStyle.Italic
-                                            )
-                                        }
-                                    }
-                                    
-                                    // Per-appointment Send button (primary action)
-                                    if (!showBulkMode) {
-                                        Button(
-                                            onClick = {
-                                                scope.launch {
-                                                    sendSmsForAppointment(
-                                                        context = context,
-                                                        repository = repository,
-                                                        appointment = appointment,
-                                                        tomorrowDate = tomorrowDate,
-                                                        messageTemplate = messageTemplate.text,
-                                                        snackbarHostState = snackbarHostState
-                                                    )
-                                                }
-                                            },
-                                            enabled = hasPhone,
-                                            modifier = Modifier.padding(start = 8.dp)
-                                        ) {
-                                            Text("Отправить")
-                                        }
                                     } else {
-                                        // Bulk mode: show checkbox instead
-                                        Checkbox(
-                                            checked = isSelected,
-                                            onCheckedChange = { checked ->
-                                                if (hasPhone) {
-                                                    selectedAppointments = if (checked) {
-                                                        selectedAppointments + appointment.appointmentId
-                                                    } else {
-                                                        selectedAppointments - appointment.appointmentId
-                                                    }
-                                                }
-                                            },
-                                            enabled = hasPhone,
-                                            modifier = Modifier.padding(start = 8.dp)
+                                        Text(
+                                            text = "Нет номера",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                            fontStyle = FontStyle.Italic
                                         )
                                     }
+                                }
+                                
+                                // Per-appointment Send button
+                                Button(
+                                    onClick = {
+                                        scope.launch {
+                                            sendSmsForAppointment(
+                                                context = context,
+                                                repository = repository,
+                                                appointment = appointment,
+                                                tomorrowDate = tomorrowDate,
+                                                messageTemplate = messageTemplate.text,
+                                                snackbarHostState = snackbarHostState
+                                            )
+                                        }
+                                    },
+                                    enabled = hasPhone,
+                                    modifier = Modifier.padding(start = 8.dp)
+                                ) {
+                                    Text("Отправить")
                                 }
                             }
                         }

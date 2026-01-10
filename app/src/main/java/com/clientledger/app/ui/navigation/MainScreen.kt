@@ -488,6 +488,7 @@ fun MainScreen(
                         SmsReminderScreen(
                             appointments = appointments,
                             tomorrowDate = tomorrowDate,
+                            repository = repository,
                             onBack = { navController.popBackStack() }
                         )
                     }

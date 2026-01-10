@@ -43,6 +43,7 @@ import com.clientledger.app.data.entity.AppointmentServiceEntity
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.entity.ServiceTagEntity
 import com.clientledger.app.data.repository.LedgerRepository
+import com.clientledger.app.ui.screen.reminders.formatServiceTagNamesForSms
 import com.clientledger.app.ui.viewmodel.AppointmentFieldType
 import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.util.*
@@ -589,24 +590,63 @@ fun AppointmentEditScreen(
             if (appointmentId != null && selectedClientId != null && !clientPhone.isNullOrBlank()) {
                 OutlinedButton(
                     onClick = {
-                        val phone = clientPhone ?: return@OutlinedButton
-                        val dateTime = if (appointmentId != null) {
-                            selectedDate.atTime(LocalTime.of(startHour, startMinute))
-                        } else {
-                            selectedDate.atTime(LocalTime.of(startHour, startMinute))
-                        }
-                        val formattedDate = dateTime.format(DateTimeFormatter.ofPattern("d MMMM", java.util.Locale("ru")))
-                        val formattedTime = dateTime.format(DateTimeFormatter.ofPattern("HH:mm"))
-                        
-                        val message = "Напоминание: $formattedDate в $formattedTime у вас запись."
-                        
-                        val intent = Intent(Intent.ACTION_SENDTO).apply {
-                            data = Uri.parse("smsto:$phone")
-                            putExtra("sms_body", message)
-                        }
-                        
-                        if (intent.resolveActivity(context.packageManager) != null) {
-                            context.startActivity(intent)
+                        scope.launch {
+                            val phone = clientPhone ?: return@launch
+                            val dateTime = if (appointmentId != null) {
+                                selectedDate.atTime(LocalTime.of(startHour, startMinute))
+                            } else {
+                                selectedDate.atTime(LocalTime.of(startHour, startMinute))
+                            }
+                            val formattedDate = dateTime.format(DateTimeFormatter.ofPattern("d MMMM", java.util.Locale("ru")))
+                            val formattedTime = dateTime.format(DateTimeFormatter.ofPattern("HH:mm"))
+                            
+                            // Format service tags for this appointment
+                            val serviceTags = if (appointmentId != null) {
+                                // Load service tags from database
+                                val services = repository.getServicesForAppointmentSync(appointmentId)
+                                val tagNames = services
+                                    .mapNotNull { service ->
+                                        repository.getTagById(service.serviceTagId)?.name
+                                    }
+                                formatServiceTagNamesForSms(tagNames)
+                            } else {
+                                // For new appointments, use current selected tags
+                                val tagNames = selectedServiceTagIds
+                                    .mapNotNull { tagId -> availableTags.find { it.id == tagId }?.name }
+                                formatServiceTagNamesForSms(tagNames)
+                            }
+                            
+                            // Build message with improved format (same as SMS reminders template)
+                            val message = buildString {
+                                append("Здравствуйте!\n")
+                                append("Напоминаю, что у вас запись $formattedDate в $formattedTime")
+                                if (serviceTags.isNotEmpty()) {
+                                    append(" $serviceTags") // serviceTags already includes "— ", so add space before
+                                }
+                                append(".\n")
+                                append("Если планы изменились — пожалуйста, сообщите заранее.\n")
+                                append("Спасибо!")
+                            }
+                            
+                            val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                data = Uri.parse("smsto:$phone")
+                                putExtra("sms_body", message)
+                            }
+                            
+                            try {
+                                if (intent.resolveActivity(context.packageManager) != null) {
+                                    context.startActivity(intent)
+                                } else {
+                                    // Try alternative method
+                                    val alternativeIntent = Intent(Intent.ACTION_VIEW).apply {
+                                        data = Uri.parse("sms:$phone")
+                                        putExtra("sms_body", message)
+                                    }
+                                    context.startActivity(alternativeIntent)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("AppointmentEditScreen", "Error opening SMS", e)
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),

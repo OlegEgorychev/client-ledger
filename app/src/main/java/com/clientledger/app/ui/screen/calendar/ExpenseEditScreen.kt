@@ -281,7 +281,12 @@ fun ExpenseEditScreen(
                                 tagAmounts = tagAmounts - tag
                             }
                         },
-                        label = { Text(tag.displayName) }
+                        label = { Text(tag.displayName) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                            selectedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
+                        )
                     )
                 }
             }

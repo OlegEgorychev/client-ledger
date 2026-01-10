@@ -415,7 +415,12 @@ fun AppointmentEditScreen(
                                         serviceTagPrices = serviceTagPrices - tagId
                                     },
                                     label = { Text(it.name) },
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                                        selectedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
+                                        selectedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
+                                    )
                                 )
                                 
                                 // Price input for this tag
@@ -1472,7 +1477,12 @@ fun ServiceTagSelectorDialog(
                                 }
                             },
                             label = { Text(tag.name) },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+                                selectedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
+                                selectedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
+                            )
                         )
                     }
                 }

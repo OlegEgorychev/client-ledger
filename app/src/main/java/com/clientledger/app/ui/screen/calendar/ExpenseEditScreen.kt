@@ -3,8 +3,6 @@ package com.clientledger.app.ui.screen.calendar
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,7 +15,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -66,6 +63,7 @@ fun ExpenseEditScreen(
     var note by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var hasTriedToSave by remember { mutableStateOf(false) }
     
     val scope = rememberCoroutineScope()
     val allTags = ExpenseTag.values().toList()
@@ -73,9 +71,6 @@ fun ExpenseEditScreen(
     // Time picker lists (working hours 09:00-21:00)
     val hours = (9..21).toList()
     val minutes = (0..59 step 5).toList() // Step 5 minutes: 00, 05, 10, 15, ..., 55
-    
-    // BringIntoViewRequester for amount fields
-    val amountBringIntoViewRequester = remember { BringIntoViewRequester() }
     
     // Initialize date and time from nav arg for new expenses
     LaunchedEffect(date) {
@@ -306,10 +301,16 @@ fun ExpenseEditScreen(
                     val currentAmount = tagAmounts[tag] ?: ""
                     var amountText by remember(tag) { mutableStateOf(currentAmount) }
                     
-                    // Sync with state
-                    LaunchedEffect(tag) {
-                        amountText = tagAmounts[tag] ?: ""
+                    // Sync with state when tagAmounts changes externally (e.g., when loading existing expense)
+                    LaunchedEffect(tag, currentAmount) {
+                        if (amountText != currentAmount) {
+                            amountText = currentAmount
+                        }
                     }
+                    
+                    // Check if amount is empty (for error highlighting)
+                    // Show error immediately when amount is empty - when tag is first added, amountText will be empty
+                    val isAmountEmpty = amountText.isBlank() || (amountText.replace(',', '.').toDoubleOrNull() ?: 0.0) <= 0
                     
                     Row(
                         modifier = Modifier
@@ -331,25 +332,39 @@ fun ExpenseEditScreen(
                                     tagAmounts = tagAmounts + (tag to newValue)
                                 }
                             },
-                            label = { Text("Сумма") },
-                            modifier = Modifier
-                                .width(120.dp)
-                                .bringIntoViewRequester(amountBringIntoViewRequester)
-                                .onFocusEvent { focusState ->
-                                    if (focusState.isFocused) {
-                                        scope.launch {
-                                            delay(100)
-                                            amountBringIntoViewRequester.bringIntoView()
-                                        }
-                                    }
-                                },
+                            label = { Text("Сумма *") },
+                            modifier = Modifier.width(120.dp),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             placeholder = { Text("0") },
-                            isError = amountText.isNotBlank() && 
-                                (amountText.replace(',', '.').toDoubleOrNull() ?: 0.0) <= 0
+                            isError = isAmountEmpty,
+                            colors = if (isAmountEmpty) {
+                                OutlinedTextFieldDefaults.colors(
+                                    errorBorderColor = MaterialTheme.colorScheme.error,
+                                    errorLabelColor = MaterialTheme.colorScheme.error
+                                )
+                            } else {
+                                OutlinedTextFieldDefaults.colors()
+                            }
                         )
                     }
+                }
+                
+                // Show error message if any amounts are empty
+                // Use remember to avoid recalculating on every recomposition
+                val hasEmptyAmounts = remember(selectedTags, tagAmounts) {
+                    selectedTags.any { tag ->
+                        val amountText = tagAmounts[tag] ?: ""
+                        amountText.isBlank() || (amountText.replace(',', '.').toDoubleOrNull() ?: 0.0) <= 0
+                    }
+                }
+                if (hasEmptyAmounts) {
+                    Text(
+                        text = "Заполните суммы для всех выбранных тегов",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
                 }
                 
                 // Total
@@ -367,8 +382,7 @@ fun ExpenseEditScreen(
                     Text(
                         text = MoneyUtils.formatCents(totalCents),
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.error
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -398,6 +412,7 @@ fun ExpenseEditScreen(
             // Save button
             Button(
                 onClick = {
+                    hasTriedToSave = true
                     if (!isFormValid) {
                         errorMessage = "Заполните все обязательные поля"
                         return@Button

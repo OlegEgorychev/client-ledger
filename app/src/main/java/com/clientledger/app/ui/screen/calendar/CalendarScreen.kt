@@ -119,13 +119,13 @@ fun CalendarScreen(
                 )
 
                 // Primary interactive layer: Calendar container
-                // Clearly stands out from background with white background and 4dp elevation
+                // Clearly stands out from background with theme surface color and 4dp elevation
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFFFFFFF) // Pure white #FFFFFF
+                        containerColor = MaterialTheme.colorScheme.surface
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                 ) {
@@ -950,7 +950,7 @@ fun ExpandableProfitWidget(
             .fillMaxWidth()
             .border(
                 width = 1.dp,
-                color = Color(0xFFE3E6EF), // Subtle outline #E3E6EF
+                color = MaterialTheme.colorScheme.outlineVariant,
                 shape = MaterialTheme.shapes.medium
             )
             .clickable(onClick = onToggle)
@@ -958,7 +958,7 @@ fun ExpandableProfitWidget(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xFFFFFFFF) // Pure white #FFFFFF
+                containerColor = MaterialTheme.colorScheme.surface
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
             shape = MaterialTheme.shapes.medium

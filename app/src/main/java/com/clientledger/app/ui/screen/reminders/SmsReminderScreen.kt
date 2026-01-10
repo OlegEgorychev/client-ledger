@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
@@ -15,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import com.clientledger.app.data.dao.AppointmentWithClient
 import com.clientledger.app.data.repository.LedgerRepository
@@ -24,7 +24,10 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import android.content.ActivityNotFoundException
+import android.content.Context
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -74,6 +77,128 @@ fun formatServiceTagNamesForSms(tagNames: List<String>): String {
     }
 }
 
+/**
+ * Sends SMS for a single appointment
+ * @param suppressSnackbar If true, doesn't show individual snackbar (for bulk actions)
+ * @return true if SMS app was opened successfully, false otherwise
+ */
+suspend fun sendSmsForAppointment(
+    context: Context,
+    repository: LedgerRepository,
+    appointment: AppointmentWithClient,
+    tomorrowDate: LocalDate,
+    messageTemplate: String,
+    snackbarHostState: SnackbarHostState,
+    suppressSnackbar: Boolean = false
+): Boolean {
+    val phone = appointment.clientPhone
+    if (phone.isNullOrBlank()) {
+        if (!suppressSnackbar) {
+            withContext(Dispatchers.Main) {
+                snackbarHostState.showSnackbar(
+                    message = "Нет номера телефона для ${appointment.clientName}",
+                    duration = SnackbarDuration.Short
+                )
+            }
+        }
+        return false
+    }
+    
+    // Normalize phone number
+    val normalizedPhone = phone.trim().replace("\\s+".toRegex(), "").replace("-", "")
+    
+    // Format time and date
+    val time = LocalDateTime.ofInstant(
+        java.time.Instant.ofEpochMilli(appointment.startsAt),
+        ZoneId.systemDefault()
+    )
+    val formattedTime = time.format(DateTimeFormatter.ofPattern("HH:mm"))
+    val formattedDate = tomorrowDate.format(DateTimeFormatter.ofPattern("d MMMM", java.util.Locale("ru")))
+    
+    // Format service tags
+    val serviceTags = formatServiceTagsForSms(repository, appointment.appointmentId)
+    
+    // Build final message
+    var finalMessage = messageTemplate
+        .replace("{time}", formattedTime)
+        .replace("{date}", formattedDate)
+    
+    if (serviceTags.isEmpty()) {
+        finalMessage = finalMessage.replace("{service}", "")
+    } else {
+        finalMessage = finalMessage.replace("{service}", " $serviceTags")
+    }
+    
+    android.util.Log.d("SmsReminderScreen", "Отправка SMS для ${appointment.clientName}, телефон: $normalizedPhone")
+    android.util.Log.d("SmsReminderScreen", "Сообщение: $finalMessage")
+    
+    try {
+        // Try standard smsto: scheme
+        val uri = Uri.parse("smsto:$normalizedPhone")
+        val intent = Intent(Intent.ACTION_SENDTO, uri).apply {
+            putExtra("sms_body", finalMessage)
+        }
+        
+        var intentLaunched = false
+        
+        // Try to launch SMS app
+        try {
+            context.startActivity(intent)
+            intentLaunched = true
+            android.util.Log.d("SmsReminderScreen", "✅ SMS приложение открыто успешно")
+        } catch (e: ActivityNotFoundException) {
+            android.util.Log.w("SmsReminderScreen", "⚠️ ActivityNotFoundException, пробуем альтернативный способ")
+        } catch (e: Exception) {
+            android.util.Log.e("SmsReminderScreen", "❌ Ошибка при запуске SMS", e)
+        }
+        
+        // Try alternative method if first failed
+        if (!intentLaunched) {
+            try {
+                val alternativeIntent = Intent(Intent.ACTION_VIEW).apply {
+                    data = Uri.parse("sms:$normalizedPhone")
+                    putExtra("sms_body", finalMessage)
+                }
+                context.startActivity(alternativeIntent)
+                intentLaunched = true
+                android.util.Log.d("SmsReminderScreen", "✅ Альтернативный способ сработал")
+            } catch (e: Exception) {
+                android.util.Log.e("SmsReminderScreen", "❌ Альтернативный способ также не сработал", e)
+            }
+        }
+        
+        // Show feedback only if not suppressed (for bulk actions)
+        if (!suppressSnackbar) {
+            withContext(Dispatchers.Main) {
+                if (intentLaunched) {
+                    snackbarHostState.showSnackbar(
+                        message = "Открыто SMS приложение для ${appointment.clientName}",
+                        duration = SnackbarDuration.Short
+                    )
+                } else {
+                    snackbarHostState.showSnackbar(
+                        message = "Не удалось открыть SMS приложение",
+                        duration = SnackbarDuration.Long
+                    )
+                }
+            }
+        }
+        
+        return intentLaunched
+    } catch (e: Exception) {
+        android.util.Log.e("SmsReminderScreen", "❌ Неожиданная ошибка", e)
+        if (!suppressSnackbar) {
+            withContext(Dispatchers.Main) {
+                snackbarHostState.showSnackbar(
+                    message = "Ошибка: ${e.message ?: "Неизвестная ошибка"}",
+                    duration = SnackbarDuration.Long
+                )
+            }
+        }
+        return false
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SmsReminderScreen(
@@ -96,9 +221,14 @@ fun SmsReminderScreen(
         )
     }
     
-    // Map of appointment ID to selected state (default: all selected)
+    // Map of appointment ID to selected state (for bulk action only)
     var selectedAppointments by remember {
-        mutableStateOf(appointments.map { it.appointmentId }.toSet())
+        mutableStateOf<Set<Long>>(emptySet())
+    }
+    
+    // Track if bulk mode is enabled
+    var showBulkMode by remember {
+        mutableStateOf(false)
     }
     
     Scaffold(
@@ -114,152 +244,70 @@ fun SmsReminderScreen(
             )
         },
         bottomBar = {
-            if (appointments.isNotEmpty()) {
+            if (appointments.isNotEmpty() && showBulkMode && appointments.size > 1) {
                 BottomAppBar {
-                    Button(
-                        onClick = {
-                            val selected = appointments.filter { it.appointmentId in selectedAppointments }
-                            android.util.Log.d("SmsReminderScreen", "Отправить нажата. Выбрано записей: ${selected.size}")
-                            
-                            val successCount = AtomicInteger(0)
-                            val errorCount = AtomicInteger(0)
-                            
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showBulkMode = false },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Отмена")
+                        }
+                        Button(
+                            onClick = {
+                                val selected = appointments.filter { it.appointmentId in selectedAppointments }
+                                android.util.Log.d("SmsReminderScreen", "Отправить всем нажата. Выбрано записей: ${selected.size}")
+                                
+                                val successCount = AtomicInteger(0)
+                                val errorCount = AtomicInteger(0)
+                                
                             scope.launch {
                                 selected.forEachIndexed { index, appointment ->
-                                    val phone = appointment.clientPhone
-                                    android.util.Log.d("SmsReminderScreen", "Обработка записи $index: ${appointment.clientName}, телефон: $phone")
+                                    // Use the same sendSmsForAppointment function for consistency
+                                    // Create a temporary snackbar state to track individual results
+                                    // For bulk action, we'll show a summary at the end
                                     
+                                    val phone = appointment.clientPhone
                                     if (!phone.isNullOrBlank()) {
-                                        // Нормализуем номер телефона (убираем все пробелы и дефисы)
-                                        val normalizedPhone = phone.trim().replace("\\s+".toRegex(), "").replace("-", "")
-                                        
-                                        val time = LocalDateTime.ofInstant(
-                                            java.time.Instant.ofEpochMilli(appointment.startsAt),
-                                            ZoneId.systemDefault()
-                                        )
-                                        val formattedTime = time.format(DateTimeFormatter.ofPattern("HH:mm"))
-                                        val formattedDate = tomorrowDate.format(DateTimeFormatter.ofPattern("d MMMM", java.util.Locale("ru")))
-                                        
-                                        // Format service tags for this appointment
-                                        val serviceTags = formatServiceTagsForSms(repository, appointment.appointmentId)
-                                        
-                                        // Build final message with all placeholders replaced
-                                        var finalMessage = messageTemplate.text
-                                            .replace("{time}", formattedTime)
-                                            .replace("{date}", formattedDate)
-                                        
-                                        // Handle service tags: if empty, remove "{service}", 
-                                        // otherwise replace {service} with formatted tags (which already includes "— ")
-                                        if (serviceTags.isEmpty()) {
-                                            // Remove "{service}" placeholder
-                                            finalMessage = finalMessage.replace("{service}", "")
-                                        } else {
-                                            // Replace {service} with formatted tags (includes "— " prefix)
-                                            // Add space before if template doesn't have it
-                                            finalMessage = finalMessage.replace("{service}", " $serviceTags")
+                                        // Send SMS for this appointment
+                                        // We skip showing individual snackbars for bulk action
+                                        val success = try {
+                                            sendSmsForAppointment(
+                                                context = context,
+                                                repository = repository,
+                                                appointment = appointment,
+                                                tomorrowDate = tomorrowDate,
+                                                messageTemplate = messageTemplate.text,
+                                                snackbarHostState = snackbarHostState,
+                                                suppressSnackbar = true // Suppress individual snackbars for bulk action
+                                            )
+                                        } catch (e: Exception) {
+                                            android.util.Log.e("SmsReminderScreen", "Ошибка при отправке SMS для ${appointment.clientName}", e)
+                                            false
                                         }
                                         
-                                        android.util.Log.d("SmsReminderScreen", "Создание SMS Intent для $normalizedPhone (оригинал: $phone)")
-                                        android.util.Log.d("SmsReminderScreen", "Сообщение: $finalMessage")
+                                        if (success) {
+                                            successCount.incrementAndGet()
+                                        } else {
+                                            errorCount.incrementAndGet()
+                                        }
                                         
-                                        try {
-                                            // Способ 1: smsto: схема (стандартный способ)
-                                            val uri = Uri.parse("smsto:$normalizedPhone")
-                                            android.util.Log.d("SmsReminderScreen", "Способ 1 - URI: $uri")
-                                            
-                                            val intent = Intent(Intent.ACTION_SENDTO, uri).apply {
-                                                putExtra("sms_body", finalMessage)
-                                            }
-                                            
-                                            android.util.Log.d("SmsReminderScreen", "Intent создан: action=${intent.action}, data=${intent.data}")
-                                            
-                                            // Проверяем наличие приложений для обработки SMS
-                                            // Пробуем без MATCH_DEFAULT_ONLY и с ним
-                                            val resolveList1 = context.packageManager.queryIntentActivities(intent, 0)
-                                            val resolveList2 = context.packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
-                                            android.util.Log.d("SmsReminderScreen", "Найдено приложений для SMS (без флагов): ${resolveList1.size}, (с MATCH_DEFAULT_ONLY): ${resolveList2.size}")
-                                            
-                                            var intentLaunched = false
-                                            
-                                            // Выводим все найденные приложения
-                                            resolveList1.forEach { resolveInfo ->
-                                                android.util.Log.d("SmsReminderScreen", "  - ${resolveInfo.activityInfo.packageName}/${resolveInfo.activityInfo.name}")
-                                            }
-                                            
-                                            // Пытаемся запустить даже если список пуст - иногда это работает
-                                            android.util.Log.d("SmsReminderScreen", "✅ Попытка запуска SMS приложения (способ 1) для $normalizedPhone")
-                                            try {
-                                                context.startActivity(intent)
-                                                successCount.incrementAndGet()
-                                                intentLaunched = true
-                                                android.util.Log.d("SmsReminderScreen", "✅ startActivity вызван успешно!")
-                                            } catch (e: ActivityNotFoundException) {
-                                                android.util.Log.w("SmsReminderScreen", "⚠️ ActivityNotFoundException (способ 1): ${e.message}")
-                                                // Продолжаем к следующему способу
-                                            } catch (e: Exception) {
-                                                android.util.Log.e("SmsReminderScreen", "❌ Другая ошибка при запуске (способ 1): ${e.message}", e)
-                                            }
-                                            
-                                            // Способ 2: если первый способ не сработал, пробуем альтернативный (sms: схема)
-                                            if (!intentLaunched) {
-                                                android.util.Log.d("SmsReminderScreen", "Попытка способа 2: sms: схема")
-                                                try {
-                                                    val alternativeIntent = Intent(Intent.ACTION_VIEW).apply {
-                                                        data = Uri.parse("sms:$normalizedPhone")
-                                                        putExtra("sms_body", finalMessage)
-                                                    }
-                                                    
-                                                    android.util.Log.d("SmsReminderScreen", "✅ Попытка запуска (способ 2)")
-                                                    context.startActivity(alternativeIntent)
-                                                    successCount.incrementAndGet()
-                                                    intentLaunched = true
-                                                    android.util.Log.d("SmsReminderScreen", "✅ Способ 2 сработал")
-                                                } catch (e: ActivityNotFoundException) {
-                                                    android.util.Log.w("SmsReminderScreen", "⚠️ ActivityNotFoundException (способ 2): ${e.message}")
-                                                } catch (e: Exception) {
-                                                    android.util.Log.e("SmsReminderScreen", "❌ Другая ошибка при способе 2: ${e.message}", e)
-                                                }
-                                            }
-                                            
-                                            // Способ 3: пытаемся через Intent.createChooser
-                                            if (!intentLaunched) {
-                                                android.util.Log.d("SmsReminderScreen", "Попытка способа 3: createChooser")
-                                                try {
-                                                    val chooserIntent = Intent.createChooser(intent, "Выберите приложение для SMS")
-                                                    context.startActivity(chooserIntent)
-                                                    successCount.incrementAndGet()
-                                                    intentLaunched = true
-                                                    android.util.Log.d("SmsReminderScreen", "✅ Способ 3 (chooser) сработал")
-                                                } catch (e: Exception) {
-                                                    android.util.Log.e("SmsReminderScreen", "❌ Ошибка при способе 3: ${e.message}", e)
-                                                }
-                                            }
-                                            
-                                            if (!intentLaunched) {
-                                                android.util.Log.e("SmsReminderScreen", "❌ Все способы не сработали - не найдено приложение для отправки SMS")
-                                                errorCount.incrementAndGet()
-                                            }
-                                        } catch (e: ActivityNotFoundException) {
-                                            android.util.Log.e("SmsReminderScreen", "❌ ActivityNotFoundException: нет приложения для SMS", e)
-                                            errorCount.incrementAndGet()
-                                            e.printStackTrace()
-                                        } catch (e: Exception) {
-                                            android.util.Log.e("SmsReminderScreen", "❌ Неожиданная ошибка при запуске SMS", e)
-                                            errorCount.incrementAndGet()
-                                            e.printStackTrace()
+                                        // Небольшая задержка между открытием SMS приложений (только если не последнее)
+                                        if (index < selected.size - 1) {
+                                            kotlinx.coroutines.delay(500)
                                         }
                                     } else {
                                         android.util.Log.w("SmsReminderScreen", "Пропуск записи ${appointment.clientName}: нет телефона")
                                         errorCount.incrementAndGet()
                                     }
-                                    
-                                    // Небольшая задержка между открытием SMS приложений
-                                    if (index < selected.size - 1) {
-                                        kotlinx.coroutines.delay(500)
-                                    }
                                 }
                                 
-                                // Показываем результат пользователю после обработки всех назначений
+                                // Show summary after all appointments are processed
                                 if (successCount.get() > 0) {
                                     snackbarHostState.showSnackbar(
                                         message = "Открыто SMS приложений: ${successCount.get()}",
@@ -267,18 +315,21 @@ fun SmsReminderScreen(
                                     )
                                 } else if (errorCount.get() > 0) {
                                     snackbarHostState.showSnackbar(
-                                        message = "Ошибка: не удалось открыть SMS приложение",
+                                        message = "Не удалось открыть SMS приложения",
                                         duration = SnackbarDuration.Long
                                     )
                                 }
+                                
+                                // Reset bulk mode after sending
+                                showBulkMode = false
+                                selectedAppointments = emptySet()
                             }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        enabled = selectedAppointments.isNotEmpty()
-                    ) {
-                        Text("Отправить")
+                            },
+                            modifier = Modifier.weight(2f),
+                            enabled = selectedAppointments.isNotEmpty()
+                        ) {
+                            Text("Отправить всем (${selectedAppointments.size})")
+                        }
                     }
                 }
             }
@@ -331,6 +382,20 @@ fun SmsReminderScreen(
                     }
                 }
                 
+                // Bulk mode toggle button (only if multiple appointments)
+                if (appointments.size > 1 && !showBulkMode) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { showBulkMode = true }) {
+                            Text("Отправить всем")
+                        }
+                    }
+                }
+                
                 // Appointments list
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth(),
@@ -343,58 +408,87 @@ fun SmsReminderScreen(
                             ZoneId.systemDefault()
                         )
                         val formattedTime = time.format(DateTimeFormatter.ofPattern("HH:mm"))
-                        val isSelected = appointment.appointmentId in selectedAppointments
                         val hasPhone = !appointment.clientPhone.isNullOrBlank()
+                        val isSelected = appointment.appointmentId in selectedAppointments
                         
                         Card(
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = appointment.clientName,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "$formattedTime - ${appointment.title}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    if (appointment.clientPhone != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = appointment.clientPhone,
-                                            style = MaterialTheme.typography.bodySmall,
+                                            text = appointment.clientName,
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "$formattedTime - ${appointment.title}",
+                                            style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        if (appointment.clientPhone != null) {
+                                            Text(
+                                                text = appointment.clientPhone,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        } else {
+                                            Text(
+                                                text = "Нет номера",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                                fontStyle = FontStyle.Italic
+                                            )
+                                        }
+                                    }
+                                    
+                                    // Per-appointment Send button (primary action)
+                                    if (!showBulkMode) {
+                                        Button(
+                                            onClick = {
+                                                scope.launch {
+                                                    sendSmsForAppointment(
+                                                        context = context,
+                                                        repository = repository,
+                                                        appointment = appointment,
+                                                        tomorrowDate = tomorrowDate,
+                                                        messageTemplate = messageTemplate.text,
+                                                        snackbarHostState = snackbarHostState
+                                                    )
+                                                }
+                                            },
+                                            enabled = hasPhone,
+                                            modifier = Modifier.padding(start = 8.dp)
+                                        ) {
+                                            Text("Отправить")
+                                        }
                                     } else {
-                                        Text(
-                                            text = "Телефон не указан",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error
+                                        // Bulk mode: show checkbox instead
+                                        Checkbox(
+                                            checked = isSelected,
+                                            onCheckedChange = { checked ->
+                                                if (hasPhone) {
+                                                    selectedAppointments = if (checked) {
+                                                        selectedAppointments + appointment.appointmentId
+                                                    } else {
+                                                        selectedAppointments - appointment.appointmentId
+                                                    }
+                                                }
+                                            },
+                                            enabled = hasPhone,
+                                            modifier = Modifier.padding(start = 8.dp)
                                         )
                                     }
                                 }
-                                
-                                Checkbox(
-                                    checked = isSelected,
-                                    onCheckedChange = { checked ->
-                                        if (hasPhone) {
-                                            selectedAppointments = if (checked) {
-                                                selectedAppointments + appointment.appointmentId
-                                            } else {
-                                                selectedAppointments - appointment.appointmentId
-                                            }
-                                        }
-                                    },
-                                    enabled = hasPhone
-                                )
                             }
                         }
                     }

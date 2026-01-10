@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Client Ledger</string>
+    
+    <!-- Google OAuth Client ID for Drive API -->
+    <!-- Получите Client ID в Google Cloud Console: https://console.cloud.google.com/ -->
+    <!-- Формат: XXXXX.apps.googleusercontent.com -->
+    <!-- Оставьте пустым для отключения Google Drive интеграции -->
+    <string name="google_oauth_client_id" translatable="false">YOUR_CLIENT_ID_HERE.apps.googleusercontent.com</string>
 </resources>
 
 

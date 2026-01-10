@@ -3,6 +3,7 @@ package com.clientledger.app.data.backup
 import android.content.Context
 import android.util.Log
 import com.clientledger.app.data.entity.*
+import com.clientledger.app.data.preferences.AppPreferences
 import com.clientledger.app.data.repository.LedgerRepository
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
@@ -36,6 +37,7 @@ class BackupRepository(
     private val context: Context,
     private val repository: LedgerRepository
 ) {
+    private val appPreferences = AppPreferences(context)
     private val backupDir: File = File(context.filesDir, BACKUP_DIR).apply {
         if (!exists()) mkdirs()
     }
@@ -80,17 +82,30 @@ class BackupRepository(
     
     /**
      * Write backup payload to latest_backup.json and optionally save to history.
+     * File name format: backup_001_2024-01-15_14-30.json (number_date_time)
      */
-    suspend fun writeBackup(payload: BackupPayload): Result<File> = withContext(Dispatchers.IO) {
+    suspend fun writeBackup(payload: BackupPayload): Result<BackupFileInfo> = withContext(Dispatchers.IO) {
         try {
-            // Write to latest_backup.json
+            // Get next backup number
+            val backupNumber = appPreferences.getNextBackupNumber()
+            
+            // Format date and time for filename: YYYY-MM-DD_HH-mm
+            val instant = Instant.parse(payload.createdAt)
+            val dateTime = instant.atZone(java.time.ZoneId.systemDefault())
+            val dateStr = dateTime.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            val timeStr = dateTime.format(java.time.format.DateTimeFormatter.ofPattern("HH-mm"))
+            
+            // Create filename with number and date: backup_001_2024-01-15_14-30.json
+            val backupNumberStr = String.format("%03d", backupNumber) // 001, 002, 003, etc.
+            val backupFileName = "backup_${backupNumberStr}_${dateStr}_${timeStr}.json"
+            
+            // Write to latest_backup.json (for backward compatibility)
             FileWriter(latestBackupFile).use { writer ->
                 gson.toJson(payload, writer)
             }
             
-            // Also save to history with timestamp
-            val timestamp = payload.createdAt.replace(":", "-").replace(".", "-")
-            val historyFile = File(historyDir, "backup_${timestamp}.json")
+            // Also save to history with numbered filename
+            val historyFile = File(historyDir, backupFileName)
             FileWriter(historyFile).use { writer ->
                 gson.toJson(payload, writer)
             }
@@ -98,13 +113,32 @@ class BackupRepository(
             // Clean up old history files (keep only last N)
             cleanupOldHistoryBackups()
             
-            Log.d(TAG, "Backup written successfully to ${latestBackupFile.absolutePath}")
-            Result.success(latestBackupFile)
+            val backupInfo = BackupFileInfo(
+                file = historyFile,
+                backupNumber = backupNumber,
+                date = dateStr,
+                time = timeStr,
+                fileName = backupFileName
+            )
+            
+            Log.d(TAG, "Backup written successfully: ${historyFile.absolutePath}")
+            Result.success(backupInfo)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write backup", e)
             Result.failure(e)
         }
     }
+    
+    /**
+     * Data class for backup file information
+     */
+    data class BackupFileInfo(
+        val file: File,
+        val backupNumber: Int,
+        val date: String,
+        val time: String,
+        val fileName: String
+    )
     
     /**
      * Read backup from file.

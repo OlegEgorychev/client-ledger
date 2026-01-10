@@ -17,10 +17,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.onFocusEvent
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.window.Dialog
+import com.clientledger.app.LedgerApplication
 import com.clientledger.app.data.entity.ExpenseEntity
 import com.clientledger.app.data.entity.ExpenseItemEntity
 import com.clientledger.app.data.entity.ExpenseTag
@@ -45,6 +47,10 @@ fun ExpenseEditScreen(
     repository: LedgerRepository,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
+    val app = remember { context.applicationContext as? LedgerApplication }
+    val backupScheduler = remember(app) { app?.backupScheduler }
+    
     var selectedDate by remember { mutableStateOf(date) }
     var showDatePicker by remember { mutableStateOf(false) }
     // Time selection for expense
@@ -425,6 +431,10 @@ fun ExpenseEditScreen(
                             }
                             
                             repository.saveExpenseWithItems(expense, items)
+                            
+                            // Trigger automatic backup after successful save
+                            backupScheduler?.scheduleBackup()
+                            
                             onBack()
                         } catch (e: Exception) {
                             errorMessage = "Ошибка сохранения: ${e.message}"

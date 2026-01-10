@@ -3,6 +3,7 @@ package com.clientledger.app
 import android.app.Application
 import android.content.pm.PackageManager
 import com.clientledger.app.data.backup.BackupScheduler
+import com.clientledger.app.data.backup.GoogleDriveBackupService
 import com.clientledger.app.data.database.AppDatabase
 import com.clientledger.app.data.preferences.AppPreferences
 import com.clientledger.app.data.repository.LedgerRepository
@@ -28,6 +29,10 @@ class LedgerApplication : Application() {
         )
     }
     
+    val googleDriveBackupService by lazy {
+        GoogleDriveBackupService(this)
+    }
+    
     val backupScheduler by lazy {
         val appVersion = try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
@@ -39,7 +44,7 @@ class LedgerApplication : Application() {
         } catch (e: Exception) {
             "Unknown"
         }
-        BackupScheduler(this, repository, appVersion)
+        BackupScheduler(this, repository, appVersion, googleDriveBackupService)
     }
     
     override fun onCreate() {

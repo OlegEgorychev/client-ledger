@@ -10,6 +10,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalContext
+import com.clientledger.app.LedgerApplication
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.components.PhoneInput
@@ -43,6 +45,9 @@ fun ClientEditScreen(
     val phoneFocusRequester = remember { FocusRequester() }
 
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val app = context.applicationContext as? LedgerApplication
+    val backupScheduler = remember(app) { app?.backupScheduler }
 
     LaunchedEffect(clientId) {
         if (clientId != null) {
@@ -288,6 +293,10 @@ fun ClientEditScreen(
                             } else {
                                 repository.updateClient(client)
                             }
+                            
+                            // Trigger automatic backup after successful save
+                            backupScheduler?.scheduleBackup()
+                            
                             onBack()
                         } catch (e: Exception) {
                             error = e.message ?: "Ошибка сохранения"

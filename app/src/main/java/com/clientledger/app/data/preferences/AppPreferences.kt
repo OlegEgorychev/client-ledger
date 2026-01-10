@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 
 private val Context.appDataStore: DataStore<Preferences> by preferencesDataStore(name = "app_preferences")
 
@@ -16,6 +17,7 @@ private val DAILY_REMINDER_ENABLED_KEY = booleanPreferencesKey("daily_reminder_e
 private val DEBUG_REMINDER_ENABLED_KEY = booleanPreferencesKey("debug_reminder_enabled")
 private val REMINDER_HOUR_KEY = intPreferencesKey("reminder_hour")
 private val REMINDER_MINUTE_KEY = intPreferencesKey("reminder_minute")
+private val BACKUP_COUNTER_KEY = intPreferencesKey("backup_counter")
 
 class AppPreferences(private val context: Context) {
     val dailyReminderEnabled: Flow<Boolean> = context.appDataStore.data.map { preferences ->
@@ -52,5 +54,22 @@ class AppPreferences(private val context: Context) {
             preferences[REMINDER_HOUR_KEY] = hour.coerceIn(0, 23)
             preferences[REMINDER_MINUTE_KEY] = minute.coerceIn(0, 59)
         }
+    }
+    
+    // Backup counter for numbering backups
+    suspend fun getNextBackupNumber(): Int {
+        var nextNumber = 0
+        context.appDataStore.edit { preferences ->
+            val current = preferences[BACKUP_COUNTER_KEY] ?: 0
+            nextNumber = current + 1
+            preferences[BACKUP_COUNTER_KEY] = nextNumber
+        }
+        return nextNumber
+    }
+    
+    suspend fun getCurrentBackupNumber(): Int {
+        return context.appDataStore.data.map { preferences ->
+            preferences[BACKUP_COUNTER_KEY] ?: 0
+        }.first()
     }
 }

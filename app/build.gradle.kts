@@ -30,6 +30,41 @@ android {
             )
         }
     }
+    
+    // Добавляем задачу для получения SHA-1 отпечатка
+    tasks.register("printSha1") {
+        group = "other"
+        description = "Выводит SHA-1 отпечаток debug keystore"
+        doLast {
+            val keystoreFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+            if (keystoreFile.exists()) {
+                println("\n" + "=".repeat(60))
+                println("  SHA-1 для Debug APK:")
+                println("=".repeat(60))
+                exec {
+                    commandLine(
+                        "keytool",
+                        "-list",
+                        "-v",
+                        "-keystore", keystoreFile.absolutePath,
+                        "-alias", "androiddebugkey",
+                        "-storepass", "android",
+                        "-keypass", "android"
+                    )
+                }
+                println("\n" + "=".repeat(60))
+                println("  Данные для Google Cloud Console:")
+                println("=".repeat(60))
+                println("Package name: com.clientledger.app")
+                println("SHA-1: (см. строку SHA1: выше)")
+                println("=".repeat(60) + "\n")
+            } else {
+                println("\n✗ Debug keystore не найден по пути: ${keystoreFile.absolutePath}")
+                println("Запустите Android Studio хотя бы один раз или создайте debug keystore вручную.\n")
+            }
+        }
+    }
+    
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -46,6 +81,11 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "/META-INF/DEPENDENCIES"
+            excludes += "/META-INF/LICENSE"
+            excludes += "/META-INF/LICENSE.txt"
+            excludes += "/META-INF/NOTICE"
+            excludes += "/META-INF/NOTICE.txt"
         }
     }
 }
@@ -94,6 +134,29 @@ dependencies {
     
     // JSON serialization for backup
     implementation("com.google.code.gson:gson:2.10.1")
+    
+    // Jackson для Google API Client (требуется для JacksonFactory)
+    // Версия 2.12.3 совместима с google-api-client-android:1.32.1
+    implementation("com.fasterxml.jackson.core:jackson-core:2.12.3")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.12.3")
+    
+    // Google Play Services for authentication
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
+    
+    // Google HTTP Client for Android (нужен для AndroidHttp)
+    implementation("com.google.http-client:google-http-client-android:1.43.3")
+    
+    // Google HTTP Client Gson (нужен для GsonFactory)
+    implementation("com.google.http-client:google-http-client-gson:1.43.3")
+    
+    // Google API Client (базовая библиотека)
+    implementation("com.google.api-client:google-api-client:1.32.1")
+    
+    // Google API Client for Android (версия 1.32.1 содержит GoogleAccountCredential)
+    implementation("com.google.api-client:google-api-client-android:1.32.1") {
+        exclude(group = "com.google.android.gms", module = "play-services-auth")
+    }
+    implementation("com.google.apis:google-api-services-drive:v3-rev20220815-2.0.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

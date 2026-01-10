@@ -18,7 +18,8 @@ private const val DEBOUNCE_DELAY_MS = 2000L // 2 seconds debounce window
 class BackupScheduler(
     private val context: Context,
     private val repository: LedgerRepository,
-    private val appVersion: String
+    private val appVersion: String,
+    private val googleDriveService: GoogleDriveBackupService? = null
 ) {
     private val backupRepository = BackupRepository(context, repository)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -52,7 +53,7 @@ class BackupScheduler(
     /**
      * Perform backup immediately (for manual backup actions).
      */
-    suspend fun performBackupNow(): Result<File> = withContext(Dispatchers.IO) {
+    suspend fun performBackupNow(): Result<BackupRepository.BackupFileInfo> = withContext(Dispatchers.IO) {
         // Cancel any pending backup
         backupJob?.cancel()
         
@@ -62,7 +63,7 @@ class BackupScheduler(
     /**
      * Internal method to perform the actual backup.
      */
-    private suspend fun performBackup(): Result<File> {
+    private suspend fun performBackup(): Result<BackupRepository.BackupFileInfo> {
         return try {
             Log.d(TAG, "Creating backup snapshot...")
             val payload = backupRepository.createBackupSnapshot(appVersion)
@@ -70,9 +71,25 @@ class BackupScheduler(
             Log.d(TAG, "Writing backup to file...")
             val result = backupRepository.writeBackup(payload)
             
-            result.onSuccess {
+            result.onSuccess { backupInfo ->
                 _lastBackupTimestamp.value = payload.createdAt
-                Log.d(TAG, "Backup completed successfully at ${payload.createdAt}")
+                Log.d(TAG, "Backup completed successfully: ${backupInfo.fileName} at ${payload.createdAt}")
+                
+                // Upload to Google Drive if service is available and user is signed in
+                googleDriveService?.let { driveService ->
+                    if (driveService.isSignedIn()) {
+                        scope.launch {
+                            driveService.uploadBackupToDrive(backupInfo.file, backupInfo.fileName)
+                                .onSuccess { fileId ->
+                                    Log.d(TAG, "Backup uploaded to Google Drive: $fileId")
+                                }
+                                .onFailure { error ->
+                                    Log.e(TAG, "Failed to upload backup to Google Drive", error)
+                                    // Don't fail the backup if Drive upload fails
+                                }
+                        }
+                    }
+                }
             }.onFailure { error ->
                 Log.e(TAG, "Backup failed", error)
             }

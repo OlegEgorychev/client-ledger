@@ -103,6 +103,8 @@ fun AppointmentEditScreen(
     // Client phone for SMS button
     var clientPhone by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val app = remember { context.applicationContext as? com.clientledger.app.LedgerApplication }
+    val backupScheduler = remember(app) { app?.backupScheduler }
     
     // Инициализируем дату и время при первом запуске
     LaunchedEffect(date) {
@@ -1023,6 +1025,9 @@ fun AppointmentEditScreen(
                             // Save appointment with services
                             val savedAppointmentId = repository.saveAppointmentWithServices(appointment, services)
                             Log.d("AppointmentEdit", "Appointment saved successfully with ID: $savedAppointmentId")
+                            
+                            // Trigger automatic backup after successful save
+                            backupScheduler?.scheduleBackup()
                             
                             // Обновляем рабочие дни после сохранения записи
                             viewModel.refreshWorkingDays()

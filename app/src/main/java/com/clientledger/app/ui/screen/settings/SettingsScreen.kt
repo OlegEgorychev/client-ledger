@@ -13,10 +13,14 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.clientledger.app.LedgerApplication
+import com.clientledger.app.data.backup.BackupRepository
 import com.clientledger.app.data.preferences.AppPreferences
 import com.clientledger.app.data.preferences.ThemePreferences
 import com.clientledger.app.ui.theme.ThemeMode
@@ -26,6 +30,12 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import kotlinx.coroutines.flow.combine
 import java.io.File
+import android.net.Uri
+import android.content.ContentResolver
+import android.widget.Toast
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.ConnectionResult
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -228,12 +238,54 @@ fun SettingsScreen(
             val app = context.applicationContext as? com.clientledger.app.LedgerApplication
             val backupScheduler = remember(app) { app?.backupScheduler }
             val repository = remember(app) { app?.repository }
+            val googleDriveService = remember(app) { app?.googleDriveBackupService }
             
             var lastBackupTimestamp by remember { mutableStateOf<String?>(null) }
-            var showRestoreDialog by remember { mutableStateOf(false) }
+            var showRestoreConfirmDialog by remember { mutableStateOf(false) }
             var restoreError by remember { mutableStateOf<String?>(null) }
             var isBackingUp by remember { mutableStateOf(false) }
             var isRestoring by remember { mutableStateOf(false) }
+            var isGoogleSignedIn by remember { mutableStateOf(false) }
+            var googleAccountEmail by remember { mutableStateOf<String?>(null) }
+            
+            // Check Google sign-in status
+            LaunchedEffect(googleDriveService) {
+                googleDriveService?.let { service ->
+                    isGoogleSignedIn = service.isSignedIn()
+                    googleAccountEmail = service.getSignedInAccount()?.email
+                }
+            }
+            
+            // Google Sign-In launcher
+            val googleSignInLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                googleDriveService?.let { service ->
+                    try {
+                        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                        val account = task.getResult(ApiException::class.java)
+                        isGoogleSignedIn = true
+                        googleAccountEmail = account.email
+                        Toast.makeText(context, "Вход выполнен: ${account.email}", Toast.LENGTH_SHORT).show()
+                    } catch (e: ApiException) {
+                        isGoogleSignedIn = false
+                        googleAccountEmail = null
+                        val errorMessage = when (e.statusCode) {
+                            ConnectionResult.NETWORK_ERROR -> "Ошибка сети"
+                            12501 -> "Вход отменён" // GoogleSignInStatusCodes.SIGN_IN_CANCELLED
+                            12500 -> "Ошибка входа" // GoogleSignInStatusCodes.SIGN_IN_FAILED
+                            7 -> "Ошибка сети" // ConnectionResult.NETWORK_ERROR
+                            8 -> "Ошибка внутренней службы" // ConnectionResult.INTERNAL_ERROR
+                            else -> "Ошибка входа: ${e.message}"
+                        }
+                        Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        isGoogleSignedIn = false
+                        googleAccountEmail = null
+                        Toast.makeText(context, "Ошибка: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
             
             // Load last backup timestamp
             LaunchedEffect(backupScheduler) {
@@ -255,6 +307,43 @@ fun SettingsScreen(
             }
             
             SettingsSectionCard(title = "Резервное копирование") {
+                // Google Drive status
+                googleDriveService?.let { service ->
+                    if (isGoogleSignedIn) {
+                        SettingsTextRow(
+                            title = "Google Drive",
+                            value = googleAccountEmail ?: "Авторизован"
+                        )
+                        SettingsButtonRow(
+                            title = "Выйти из Google",
+                            description = "Отключить автоматическую загрузку в Google Drive",
+                            buttonText = "Выйти",
+                            enabled = true,
+                            onClick = {
+                                scope.launch {
+                                    service.signOut()
+                                    isGoogleSignedIn = false
+                                    googleAccountEmail = null
+                                    Toast.makeText(context, "Выход выполнен", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                    } else {
+                        val signInClient = service.getGoogleSignInClient()
+                        SettingsButtonRow(
+                            title = "Войти в Google Drive",
+                            description = "Автоматически сохранять бэкапы в Google Drive. Требуется настройка OAuth Client ID в Google Cloud Console.",
+                            buttonText = "Войти",
+                            enabled = signInClient != null,
+                            onClick = {
+                                signInClient?.let {
+                                    googleSignInLauncher.launch(it.signInIntent)
+                                }
+                            }
+                        )
+                    }
+                }
+                
                 // Last backup timestamp
                 lastBackupTimestamp?.let { timestamp ->
                     SettingsTextRow(
@@ -281,18 +370,18 @@ fun SettingsScreen(
                             restoreError = null
                             try {
                                 val result = backupScheduler?.performBackupNow()
-                                result?.onSuccess { backupFile ->
+                                result?.onSuccess { backupInfo ->
                                     try {
                                         // Share the backup file using FileProvider
                                         val fileUri = androidx.core.content.FileProvider.getUriForFile(
                                             context,
                                             "${context.packageName}.fileprovider",
-                                            backupFile
+                                            backupInfo.file
                                         )
                                         val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                             type = "application/json"
                                             putExtra(android.content.Intent.EXTRA_STREAM, fileUri)
-                                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Backup ${backupFile.name}")
+                                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Backup ${backupInfo.fileName}")
                                             addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                         }
                                         context.startActivity(android.content.Intent.createChooser(shareIntent, "Экспортировать бэкап"))
@@ -319,7 +408,7 @@ fun SettingsScreen(
                     buttonText = "Восстановить",
                     enabled = !isRestoring && !isBackingUp && repository != null && backupScheduler != null,
                     onClick = {
-                        showRestoreDialog = true
+                        showRestoreConfirmDialog = true
                     }
                 )
                 
@@ -334,25 +423,75 @@ fun SettingsScreen(
                 }
             }
             
+            // File picker launcher for restore
+            val filePickerLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.GetContent()
+            ) { uri: Uri? ->
+                if (uri != null && repository != null && app != null) {
+                    scope.launch {
+                        isRestoring = true
+                        restoreError = null
+                        try {
+                            // Read backup from selected file
+                            val backupRepository = BackupRepository(context, repository)
+                            val tempFile = File(context.cacheDir, "temp_backup_${System.currentTimeMillis()}.json")
+                            
+                            try {
+                                // Copy content from URI to temp file
+                                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                                    tempFile.outputStream().use { outputStream ->
+                                        inputStream.copyTo(outputStream)
+                                    }
+                                } ?: throw IllegalStateException("Не удалось прочитать файл")
+                                
+                                // Read backup from temp file
+                                val backupResult = backupRepository.readBackup(tempFile)
+                                backupResult.onSuccess { payload ->
+                                    // Perform restore
+                                    val restoreResult = backupRepository.restoreFromBackup(payload)
+                                    restoreResult.onSuccess {
+                                        Toast.makeText(context, "Данные успешно восстановлены", Toast.LENGTH_SHORT).show()
+                                        restoreError = null
+                                        // Refresh backup timestamp
+                                        lastBackupTimestamp = backupScheduler?.getLatestBackupTimestamp()
+                                    }.onFailure { error ->
+                                        restoreError = "Ошибка восстановления: ${error.message ?: "Неизвестная ошибка"}"
+                                    }
+                                }.onFailure { error ->
+                                    restoreError = "Не удалось прочитать бэкап: ${error.message ?: "Неизвестная ошибка"}"
+                                }
+                            } finally {
+                                // Clean up temp file
+                                tempFile.delete()
+                                isRestoring = false
+                            }
+                        } catch (e: Exception) {
+                            restoreError = "Ошибка: ${e.message ?: "Неизвестная ошибка"}"
+                            isRestoring = false
+                        }
+                    }
+                }
+            }
+            
             // Restore confirmation dialog
-            if (showRestoreDialog) {
+            if (showRestoreConfirmDialog) {
                 AlertDialog(
-                    onDismissRequest = { showRestoreDialog = false },
+                    onDismissRequest = { showRestoreConfirmDialog = false },
                     title = { Text("Восстановление данных") },
                     text = { Text("Это действие заменит все текущие данные данными из бэкапа. Продолжить?") },
                     confirmButton = {
                         TextButton(
                             onClick = {
-                                showRestoreDialog = false
-                                // TODO: Implement file picker for restore
-                                restoreError = "Функция восстановления в разработке. Используйте системный файловый менеджер для выбора файла."
+                                showRestoreConfirmDialog = false
+                                // Launch file picker
+                                filePickerLauncher.launch("application/json")
                             }
                         ) {
-                            Text("Восстановить")
+                            Text("Выбрать файл")
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showRestoreDialog = false }) {
+                        TextButton(onClick = { showRestoreConfirmDialog = false }) {
                             Text("Отмена")
                         }
                     }

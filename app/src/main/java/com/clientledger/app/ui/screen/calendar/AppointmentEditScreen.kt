@@ -32,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -306,9 +308,6 @@ fun AppointmentEditScreen(
     }
 
     val snackbarHostState = remember { SnackbarHostState() }
-    
-    // BringIntoViewRequester for Amount field
-    val amountBringIntoViewRequester = remember { BringIntoViewRequester() }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -421,29 +420,71 @@ fun AppointmentEditScreen(
                                 
                                 // Price input for this tag
                                 val currentPrice = serviceTagPrices[tagId] ?: 0
-                                val priceRubles = if (currentPrice > 0) MoneyUtils.centsToRubles(currentPrice.toLong()).toString() else ""
-                                var priceText by remember(tagId) { mutableStateOf(priceRubles) }
+                                
+                                // Compute priceRubles based on currentPrice (only whole rubles, no kopecks)
+                                val priceRubles = remember(tagId, currentPrice) {
+                                    if (currentPrice > 0) {
+                                        // Convert cents to whole rubles (integer division)
+                                        (currentPrice / 100).toString()
+                                    } else {
+                                        ""
+                                    }
+                                }
+                                
+                                // Local state for text input - initialized from priceRubles
+                                var priceText by remember(tagId) { 
+                                    mutableStateOf(
+                                        if (currentPrice > 0) {
+                                            // Convert cents to whole rubles (integer division)
+                                            (currentPrice / 100).toString()
+                                        } else {
+                                            ""
+                                        }
+                                    ) 
+                                }
+                                
+                                // Sync priceText with priceRubles when price changes externally (e.g., when loading existing appointment)
+                                LaunchedEffect(tagId, priceRubles) {
+                                    if (priceText != priceRubles) {
+                                        priceText = priceRubles
+                                    }
+                                }
+                                
+                                // Check if price is empty (for error highlighting)
+                                // Show error immediately when price is empty - when tag is first added, currentPrice will be 0 and priceText will be empty
+                                val isPriceEmpty = priceText.isBlank() || currentPrice == 0
                                 
                                 OutlinedTextField(
                                     value = priceText,
                                     onValueChange = { newValue ->
-                                        if (newValue.all { c -> c.isDigit() || c == '.' || c == ',' }) {
+                                        if (newValue.all { c -> c.isDigit() }) {
                                             priceText = newValue
-                                            val priceCents = MoneyUtils.rublesToCents(newValue.replace(',', '.').toDoubleOrNull() ?: 0.0)
-                                            serviceTagPrices = serviceTagPrices + (tagId to priceCents.toInt())
+                                            val priceRubles = newValue.toIntOrNull() ?: 0
+                                            val priceCents = priceRubles * 100 // Convert rubles to cents
+                                            serviceTagPrices = serviceTagPrices + (tagId to priceCents)
                                         }
                                     },
                                     label = { Text("Цена *") },
                                     modifier = Modifier.width(120.dp),
                                     singleLine = true,
                                     placeholder = { Text("0") },
-                                    enabled = !isFormDisabled
+                                    enabled = !isFormDisabled,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    isError = isPriceEmpty,
+                                    colors = if (isPriceEmpty) {
+                                        OutlinedTextFieldDefaults.colors(
+                                            errorBorderColor = MaterialTheme.colorScheme.error,
+                                            errorLabelColor = MaterialTheme.colorScheme.error
+                                        )
+                                    } else {
+                                        OutlinedTextFieldDefaults.colors()
+                                    }
                                 )
                             }
                         }
                     }
                     
-                    // Total amount (sum of tag prices)
+                    // Total amount (sum of tag prices) - displayed as read-only field
                     val totalCents = selectedServiceTagIds.sumOf { tagId ->
                         (serviceTagPrices[tagId] ?: 0).toLong()
                     }
@@ -453,6 +494,22 @@ fun AppointmentEditScreen(
                     LaunchedEffect(totalCents) {
                         incomeRubles = totalRubles
                     }
+                    
+                    // Display total amount as read-only field
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = totalRubles,
+                        onValueChange = { }, // Read-only
+                        label = { Text("Сумма") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        enabled = false, // Make it read-only
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                            disabledBorderColor = MaterialTheme.colorScheme.outline,
+                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
                 }
                 
                 // Tag selector dialog
@@ -907,35 +964,6 @@ fun AppointmentEditScreen(
                     modifier = Modifier.padding(start = 16.dp, top = 4.dp)
                 )
             }
-            
-            Text("Сумма (рубли) *", style = MaterialTheme.typography.labelSmall)
-            OutlinedTextField(
-                value = incomeRubles,
-                onValueChange = { if (it.all { c -> c.isDigit() || c == '.' || c == ',' }) incomeRubles = it },
-                label = { Text("Сумма") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .bringIntoViewRequester(amountBringIntoViewRequester)
-                    .onFocusEvent { focusState ->
-                        if (focusState.isFocused) {
-                            scope.launch {
-                                kotlinx.coroutines.delay(100) // Small delay to ensure keyboard is shown
-                                amountBringIntoViewRequester.bringIntoView()
-                            }
-                        }
-                    },
-                singleLine = true,
-                placeholder = { Text("1500") },
-                isError = invalidField == AppointmentFieldType.INCOME,
-                colors = if (invalidField == AppointmentFieldType.INCOME) {
-                    OutlinedTextFieldDefaults.colors(
-                        errorBorderColor = MaterialTheme.colorScheme.error,
-                        errorLabelColor = MaterialTheme.colorScheme.error
-                    )
-                } else {
-                    OutlinedTextFieldDefaults.colors()
-                }
-            )
 
             Button(
                 onClick = {

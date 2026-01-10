@@ -1115,16 +1115,8 @@ fun AppointmentEditScreen(
                         }
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                enabled = !isLoading && isSaveEnabled && !uiState.isSaving,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading && isSaveEnabled && !uiState.isSaving
             ) {
                 if (isLoading || uiState.isSaving) {
                     Row(
@@ -1135,19 +1127,10 @@ fun AppointmentEditScreen(
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp
                         )
-                        Text(
-                            text = "Сохранение…",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color.White // ЯВНЫЙ белый цвет для гарантии видимости
-                        )
+                        Text("Сохранение…")
                     }
                 } else {
-                    Text(
-                        text = "Сохранить",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White // ЯВНЫЙ белый цвет для гарантии видимости
-                    )
+                    Text("Сохранить")
                 }
             }
             

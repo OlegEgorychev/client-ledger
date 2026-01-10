@@ -57,6 +57,12 @@ class LedgerRepository(
     suspend fun getAppointmentsByDateExcluding(dateKey: String, excludeId: Long?): List<AppointmentEntity> =
         appointmentDao.getAppointmentsByDateExcluding(dateKey, excludeId)
     
+    suspend fun getTomorrowAppointmentsExcludingCanceled(dateKey: String): List<AppointmentEntity> =
+        appointmentDao.getAppointmentsByDateExcludingCanceled(dateKey)
+    
+    suspend fun getTomorrowAppointmentsWithClient(dateKey: String): List<com.clientledger.app.data.dao.AppointmentWithClient> =
+        appointmentDao.getTomorrowAppointmentsWithClient(dateKey)
+    
     fun getAppointmentsByDateRange(startDate: String, endDate: String): Flow<List<AppointmentEntity>> =
         appointmentDao.getAppointmentsByDateRange(startDate, endDate)
     

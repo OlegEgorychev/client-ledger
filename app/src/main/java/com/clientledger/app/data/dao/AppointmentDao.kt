@@ -16,6 +16,16 @@ interface AppointmentDao {
         """
         SELECT * FROM appointments 
         WHERE dateKey = :dateKey 
+        AND status != 'CANCELED'
+        ORDER BY startsAt
+        """
+    )
+    suspend fun getAppointmentsByDateExcludingCanceled(dateKey: String): List<AppointmentEntity>
+
+    @Query(
+        """
+        SELECT * FROM appointments 
+        WHERE dateKey = :dateKey 
         AND (:excludeId IS NULL OR id != :excludeId)
         ORDER BY startsAt
         """
@@ -293,7 +303,39 @@ interface AppointmentDao {
     // Test data management
     @Query("DELETE FROM appointments WHERE isTestData = 1")
     suspend fun deleteAllTestAppointments()
+    
+    // Tomorrow's appointments with client info for reminders
+    @Query(
+        """
+        SELECT 
+            a.id as appointmentId,
+            a.clientId,
+            c.firstName || ' ' || c.lastName as clientName,
+            c.phone as clientPhone,
+            a.startsAt,
+            a.dateKey,
+            a.durationMinutes,
+            a.title
+        FROM appointments a
+        INNER JOIN clients c ON a.clientId = c.id
+        WHERE a.dateKey = :dateKey 
+        AND a.status != 'CANCELED'
+        ORDER BY a.startsAt ASC
+        """
+    )
+    suspend fun getTomorrowAppointmentsWithClient(dateKey: String): List<AppointmentWithClient>
 }
+
+data class AppointmentWithClient(
+    val appointmentId: Long,
+    val clientId: Long,
+    val clientName: String,
+    val clientPhone: String?,
+    val startsAt: Long,
+    val dateKey: String,
+    val durationMinutes: Int,
+    val title: String
+)
 
 data class DayIncome(
     val dateKey: String,

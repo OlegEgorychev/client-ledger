@@ -22,17 +22,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Message
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.content.Intent
+import android.net.Uri
+import java.time.format.DateTimeFormatter
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.AppointmentServiceEntity
 import com.clientledger.app.data.entity.ClientEntity
@@ -93,6 +98,10 @@ fun AppointmentEditScreen(
     // Проверка дубля клиента
     var hasClientNameConflict by remember { mutableStateOf(false) }
     var existingClientId by remember { mutableStateOf<Long?>(null) }
+    
+    // Client phone for SMS button
+    var clientPhone by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
     
     // Инициализируем дату и время при первом запуске
     LaunchedEffect(date) {
@@ -251,9 +260,12 @@ fun AppointmentEditScreen(
                     serviceTagPrices = services.associate { it.serviceTagId to it.priceForThisTag }
                     
                     selectedClientId = it.clientId
-                    val client = repository.getClientById(it.clientId)
-                    client?.let {
-                        clientNameText = "${it.firstName} ${it.lastName}"
+                    scope.launch {
+                        val client = repository.getClientById(it.clientId)
+                        client?.let {
+                            clientNameText = "${it.firstName} ${it.lastName}"
+                            clientPhone = it.phone
+                        }
                     }
                     val dateTime = DateUtils.dateTimeToLocalDateTime(it.startsAt)
                     selectedDate = dateTime.toLocalDate()
@@ -542,6 +554,7 @@ fun AppointmentEditScreen(
                             onClick = {
                                 clientNameText = "${client.firstName} ${client.lastName}"
                                 selectedClientId = client.id
+                                clientPhone = client.phone
                                 hasClientNameConflict = false
                                 existingClientId = null
                                 showClientMenu = false
@@ -560,6 +573,7 @@ fun AppointmentEditScreen(
                             client?.let {
                                 clientNameText = "${it.firstName} ${it.lastName}"
                                 selectedClientId = it.id
+                                clientPhone = it.phone
                                 hasClientNameConflict = false
                                 existingClientId = null
                             }
@@ -568,6 +582,42 @@ fun AppointmentEditScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Выбрать клиента")
+                }
+            }
+            
+            // Кнопка "Написать клиенту" - видна только при редактировании существующей записи и наличии телефона
+            if (appointmentId != null && selectedClientId != null && !clientPhone.isNullOrBlank()) {
+                OutlinedButton(
+                    onClick = {
+                        val phone = clientPhone ?: return@OutlinedButton
+                        val dateTime = if (appointmentId != null) {
+                            selectedDate.atTime(LocalTime.of(startHour, startMinute))
+                        } else {
+                            selectedDate.atTime(LocalTime.of(startHour, startMinute))
+                        }
+                        val formattedDate = dateTime.format(DateTimeFormatter.ofPattern("d MMMM", java.util.Locale("ru")))
+                        val formattedTime = dateTime.format(DateTimeFormatter.ofPattern("HH:mm"))
+                        
+                        val message = "Напоминание: $formattedDate в $formattedTime у вас запись."
+                        
+                        val intent = Intent(Intent.ACTION_SENDTO).apply {
+                            data = Uri.parse("smsto:$phone")
+                            putExtra("sms_body", message)
+                        }
+                        
+                        if (intent.resolveActivity(context.packageManager) != null) {
+                            context.startActivity(intent)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isFormDisabled
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Message,
+                        contentDescription = null
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Написать клиенту")
                 }
             }
 

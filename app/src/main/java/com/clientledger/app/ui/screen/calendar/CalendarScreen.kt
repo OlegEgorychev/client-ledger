@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -50,6 +51,7 @@ fun CalendarScreen(
     onAddAppointment: (LocalDate) -> Unit, // Pass selected date
     onAddExpense: (LocalDate) -> Unit, // Pass selected date
     onIncomeDetailClick: ((com.clientledger.app.ui.viewmodel.StatsPeriod, LocalDate, YearMonth, Int) -> Unit)? = null,
+    onSettingsClick: (() -> Unit)? = null, // Navigate to Settings
     repository: com.clientledger.app.data.repository.LedgerRepository? = null,
     themePreferences: com.clientledger.app.data.preferences.ThemePreferences? = null,
     viewModel: CalendarViewModel = viewModel()
@@ -63,7 +65,18 @@ fun CalendarScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Календарь") })
+            var showMenu by remember { mutableStateOf(false) }
+            
+            TopAppBar(
+                title = { Text("Календарь") },
+                actions = {
+                    if (onSettingsClick != null) {
+                        IconButton(onClick = { onSettingsClick() }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Настройки")
+                        }
+                    }
+                }
+            )
         },
         floatingActionButton = {
             var showAddChooser by remember { mutableStateOf(false) }

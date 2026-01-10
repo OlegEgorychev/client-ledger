@@ -32,14 +32,57 @@ import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import androidx.core.app.ActivityCompat
+import android.content.Intent
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        private const val PERMISSION_REQUEST_CODE = 1001
+    }
+    
+    private val _notificationIntentData = MutableStateFlow<NotificationIntentData?>(null)
+    val notificationIntentData: StateFlow<NotificationIntentData?> = _notificationIntentData.asStateFlow()
+    
+    data class NotificationIntentData(
+        val navigateToDay: String?,
+        val smsRemindersAction: Boolean,
+        val tomorrowDate: String?
+    )
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Request notification permission for Android 13+ (API 33+)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    PERMISSION_REQUEST_CODE
+                )
+            }
+        }
+        
+        // Handle initial intent
+        handleIntent(intent)
         
         val app = application as LedgerApplication
         val repository = app.repository
@@ -52,15 +95,69 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val themeMode by themePreferences.themeMode.collectAsStateWithLifecycle(initialValue = ThemeMode.LIGHT)
+            val currentIntentData by notificationIntentData.collectAsStateWithLifecycle()
             
             ClientLedgerTheme(themeMode = themeMode) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation(repository, themePreferences)
+                    AppNavigation(
+                        repository = repository, 
+                        themePreferences = themePreferences,
+                        notificationIntentData = currentIntentData,
+                        onIntentHandled = { 
+                            _notificationIntentData.value = null
+                        }
+                    )
                 }
             }
+        }
+    }
+    
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        android.util.Log.d("MainActivity", "🔔 onNewIntent called! action: ${intent?.action}, extras: ${intent?.extras?.keySet()}")
+        setIntent(intent)
+        handleIntent(intent)
+        android.util.Log.d("MainActivity", "onNewIntent: NotificationIntentData after handleIntent: ${_notificationIntentData.value}")
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Also check intent in onResume in case activity was already running
+        android.util.Log.d("MainActivity", "onResume called, checking intent: action=${intent.action}")
+        handleIntent(intent)
+    }
+    
+    private fun handleIntent(intent: Intent?) {
+        if (intent == null) {
+            android.util.Log.d("MainActivity", "handleIntent: intent is null")
+            return
+        }
+        
+        val navigateToDay = intent.getStringExtra("navigate_to_day")
+        val smsRemindersAction = intent.action == com.clientledger.app.util.NotificationHelper.ACTION_SMS_REMINDERS
+        val tomorrowDate = intent.getStringExtra("tomorrow_date")
+        
+        android.util.Log.d("MainActivity", "handleIntent: action=${intent.action}, navigateToDay=$navigateToDay, smsRemindersAction=$smsRemindersAction, tomorrowDate=$tomorrowDate")
+        
+        // Only update if we have relevant data
+        if (navigateToDay != null || (smsRemindersAction && tomorrowDate != null)) {
+            val newData = NotificationIntentData(
+                navigateToDay = navigateToDay,
+                smsRemindersAction = smsRemindersAction,
+                tomorrowDate = tomorrowDate
+            )
+            android.util.Log.d("MainActivity", "📝 Updating NotificationIntentData: $newData")
+            _notificationIntentData.value = newData
+            
+            // Force a small delay to ensure StateFlow update is processed
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                android.util.Log.d("MainActivity", "✅ NotificationIntentData after update: ${_notificationIntentData.value}")
+            }, 100)
+        } else {
+            android.util.Log.d("MainActivity", "⚠️ No relevant data in intent, skipping update. navigateToDay=$navigateToDay, smsRemindersAction=$smsRemindersAction, tomorrowDate=$tomorrowDate")
         }
     }
 }
@@ -68,9 +165,27 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation(
     repository: LedgerRepository,
-    themePreferences: ThemePreferences
+    themePreferences: ThemePreferences,
+    notificationIntentData: MainActivity.NotificationIntentData?,
+    onIntentHandled: () -> Unit
 ) {
     val navController = rememberNavController()
+    
+    // Navigate to main if we have notification intent data, but don't clear it yet
+    // MainScreen will handle the actual navigation and call onIntentHandled
+    LaunchedEffect(notificationIntentData) {
+        if (notificationIntentData != null) {
+            android.util.Log.d("AppNavigation", "Notification intent received, navigating to main screen: $notificationIntentData")
+            
+            // Ensure we're on main screen - MainScreen will handle the actual navigation
+            navController.navigate("main") {
+                popUpTo("splash") { inclusive = true }
+                launchSingleTop = true
+            }
+            
+            // DON'T call onIntentHandled here - let MainScreen handle it after navigation completes
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -90,6 +205,8 @@ fun AppNavigation(
             MainScreen(
                 repository = repository,
                 themePreferences = themePreferences,
+                notificationIntentData = notificationIntentData,
+                onIntentHandled = onIntentHandled,
                 onClientClick = { clientId ->
                     navController.navigate("client_detail/$clientId")
                 },

@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -24,6 +25,14 @@ import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import com.clientledger.app.ui.viewmodel.StatsViewModel
 import com.clientledger.app.ui.screen.calendar.AppointmentEditScreen
 import com.clientledger.app.ui.screen.calendar.ExpenseEditScreen
+import com.clientledger.app.ui.screen.settings.SettingsScreen
+import com.clientledger.app.ui.screen.reminders.SmsReminderScreen
+import com.clientledger.app.data.preferences.AppPreferences
+import androidx.compose.ui.platform.LocalContext
+import com.clientledger.app.util.toDateKey
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
 sealed class MainScreenDestination(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
@@ -37,6 +46,8 @@ sealed class MainScreenDestination(val route: String, val title: String, val ico
 fun MainScreen(
     repository: LedgerRepository,
     themePreferences: com.clientledger.app.data.preferences.ThemePreferences,
+    notificationIntentData: com.clientledger.app.MainActivity.NotificationIntentData? = null,
+    onIntentHandled: () -> Unit = {},
     onClientClick: (Long) -> Unit,
     onAddClient: () -> Unit,
     onDateClick: (LocalDate) -> Unit,
@@ -44,6 +55,8 @@ fun MainScreen(
     onAddAppointment: () -> Unit,
     onAddExpense: () -> Unit
 ) {
+    val context = LocalContext.current
+    val appPreferences = remember { AppPreferences(context) }
     // Единый NavController для всех экранов (вкладки + день)
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -56,6 +69,71 @@ fun MainScreen(
             // Календарь остается в стеке и будет восстановлен при возврате
             launchSingleTop = true
             restoreState = true
+        }
+    }
+    
+    // Handle navigation from notification intent
+    // Track processed intents to avoid multiple navigations
+    var processedIntentKey by remember { mutableStateOf<String?>(null) }
+    
+    // Create a stable key for LaunchedEffect
+    val intentKey = remember(notificationIntentData) {
+        notificationIntentData?.let { "${it.navigateToDay}_${it.smsRemindersAction}_${it.tomorrowDate}" } ?: null
+    }
+    
+    LaunchedEffect(intentKey) {
+        val data = notificationIntentData ?: return@LaunchedEffect
+        if (intentKey == null || processedIntentKey == intentKey) return@LaunchedEffect
+        
+        android.util.Log.d("MainScreen", "🚀 Processing notification intent: $data, key: $intentKey")
+        
+        // Wait for NavHost to be ready
+        kotlinx.coroutines.delay(500)
+        
+        try {
+            if (data.navigateToDay != null) {
+                android.util.Log.d("MainScreen", "Navigating to day: ${data.navigateToDay}")
+                navController.navigate("day/${data.navigateToDay}") {
+                    popUpTo("calendar") { inclusive = false }
+                    launchSingleTop = true
+                }
+                processedIntentKey = intentKey
+                onIntentHandled()
+            } else if (data.smsRemindersAction && data.tomorrowDate != null) {
+                android.util.Log.d("MainScreen", "🚀 SMS REMINDERS: Navigating to sms_reminders/${data.tomorrowDate}")
+                val targetRoute = "sms_reminders/${data.tomorrowDate}"
+                
+                // Navigate directly with simple options
+                try {
+                    navController.navigate(targetRoute) {
+                        popUpTo("calendar") { inclusive = false }
+                        launchSingleTop = true
+                    }
+                    android.util.Log.d("MainScreen", "✅ SMS reminders navigation call completed")
+                } catch (e: Exception) {
+                    android.util.Log.e("MainScreen", "Navigation exception, trying alternative", e)
+                    // Fallback: try without popUpTo
+                    try {
+                        navController.navigate(targetRoute) {
+                            launchSingleTop = true
+                        }
+                    } catch (e2: Exception) {
+                        android.util.Log.e("MainScreen", "Alternative navigation also failed", e2)
+                    }
+                }
+                
+                processedIntentKey = intentKey
+                onIntentHandled()
+            } else {
+                android.util.Log.w("MainScreen", "Intent data incomplete")
+                processedIntentKey = intentKey
+                onIntentHandled()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MainScreen", "❌ Error during navigation", e)
+            e.printStackTrace()
+            processedIntentKey = intentKey
+            onIntentHandled()
         }
     }
 
@@ -76,7 +154,7 @@ fun MainScreen(
                             currentRoute == destination.route -> true
                             // Treat Day screen as part of Calendar tab
                             destination == MainScreenDestination.Calendar &&
-                                (currentRoute?.startsWith("day/") == true) -> true
+                                (currentRoute?.startsWith("day/") == true || currentRoute?.startsWith("sms_reminders/") == true) -> true
                             else -> false
                         },
                         onClick = {
@@ -157,6 +235,9 @@ fun MainScreen(
                     },
                     onIncomeDetailClick = { period, date, yearMonth, year ->
                         navController.navigate("income_detail/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
+                    },
+                    onSettingsClick = {
+                        navController.navigate("settings")
                     },
                     repository = repository,
                     themePreferences = themePreferences,
@@ -357,6 +438,59 @@ fun MainScreen(
                         repository = repository,
                         onBack = { navController.popBackStack() }
                     )
+                }
+            }
+            
+            // Settings Screen
+            composable("settings") {
+                SettingsScreen(
+                    appPreferences = appPreferences,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            
+            // SMS Reminders Screen
+            composable("sms_reminders/{tomorrowDate}") { backStackEntry ->
+                android.util.Log.d("MainScreen", "🎯 SMS Reminders composable called! tomorrowDate argument: ${backStackEntry.arguments?.getString("tomorrowDate")}")
+                val tomorrowDateStr = backStackEntry.arguments?.getString("tomorrowDate")
+                tomorrowDateStr?.let { dateStr ->
+                    android.util.Log.d("MainScreen", "Parsing tomorrowDate: $dateStr")
+                    val tomorrowDate = try {
+                        LocalDate.parse(dateStr)
+                    } catch (e: Exception) {
+                        android.util.Log.e("MainScreen", "Error parsing date: $dateStr", e)
+                        LocalDate.now().plusDays(1) // Fallback to tomorrow
+                    }
+                    android.util.Log.d("MainScreen", "Parsed tomorrowDate: $tomorrowDate")
+                    
+                    val scope = rememberCoroutineScope()
+                    var appointments by remember { mutableStateOf<List<com.clientledger.app.data.dao.AppointmentWithClient>>(emptyList()) }
+                    var isLoading by remember { mutableStateOf(true) }
+                    
+                    LaunchedEffect(tomorrowDate) {
+                        android.util.Log.d("MainScreen", "Loading appointments for date: ${tomorrowDate.toDateKey()}")
+                        scope.launch {
+                            isLoading = true
+                            appointments = repository.getTomorrowAppointmentsWithClient(tomorrowDate.toDateKey())
+                            isLoading = false
+                            android.util.Log.d("MainScreen", "Loaded ${appointments.size} appointments for SMS reminders")
+                        }
+                    }
+                    
+                    if (isLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    } else {
+                        SmsReminderScreen(
+                            appointments = appointments,
+                            tomorrowDate = tomorrowDate,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
                 }
             }
         }

@@ -86,11 +86,11 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .verticalScroll(scrollState)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Section 1: Внешний вид (Appearance)
-            SettingsSection(title = "Внешний вид") {
+            SettingsSectionCard(title = "Внешний вид") {
                 // Theme selector
                 ThemeSelectorRow(
                     themeMode = themeMode,
@@ -103,7 +103,7 @@ fun SettingsScreen(
             }
             
             // Section 2: Уведомления (Notifications)
-            SettingsSection(title = "Уведомления") {
+            SettingsSectionCard(title = "Уведомления") {
                 // Main user-facing toggle for reminder
                 SettingsSwitchRow(
                     title = "Уведомления о завтрашнем расписании",
@@ -234,7 +234,7 @@ fun SettingsScreen(
             }
             
             if (isDebug) {
-                SettingsSection(title = "Отладка") {
+                SettingsSectionCard(title = "Отладка") {
                     // Test notification button
                     SettingsButtonRow(
                         title = "Тестирование уведомлений",
@@ -270,8 +270,7 @@ fun SettingsScreen(
             }
             
             // Section 4: О приложении (About) - Version at bottom
-            Spacer(modifier = Modifier.height(8.dp))
-            SettingsSection(title = "О приложении") {
+            SettingsSectionCard(title = "О приложении") {
                 SettingsTextRow(
                     title = "Версия",
                     value = versionName
@@ -282,32 +281,35 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsSection(
+private fun SettingsSectionCard(
     title: String,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(vertical = 4.dp)
-        )
-        
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp)
-            ) {
-                content()
-            }
+            // Section title
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            
+            // Section content
+            content()
         }
     }
 }

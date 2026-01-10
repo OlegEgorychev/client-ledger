@@ -100,7 +100,13 @@ fun ExpenseEditScreen(
                     val items = repository.getExpenseItems(expenseId)
                     selectedTags = items.map { item -> item.tag }.toSet()
                     tagAmounts = items.associate { item ->
-                        item.tag to MoneyUtils.centsToRubles(item.amountCents).toString()
+                        // Convert cents to rubles, format without scientific notation
+                        val rubles = item.amountCents / 100.0
+                        item.tag to if (rubles == rubles.toLong().toDouble()) {
+                            rubles.toLong().toString() // Integer value, no decimals
+                        } else {
+                            String.format("%.2f", rubles).replace(",", ".") // Decimal with 2 places
+                        }
                     }
                 }
             }
@@ -328,8 +334,24 @@ fun ExpenseEditScreen(
                             value = amountText,
                             onValueChange = { newValue ->
                                 if (newValue.all { c -> c.isDigit() || c == '.' || c == ',' }) {
-                                    amountText = newValue
-                                    tagAmounts = tagAmounts + (tag to newValue)
+                                    if (newValue.isEmpty()) {
+                                        amountText = newValue
+                                        tagAmounts = tagAmounts + (tag to newValue)
+                                    } else {
+                                        // Check if value is within reasonable limits
+                                        // Long max in cents: 9,223,372,036,854,775,807
+                                        // Max rubles that fit: 92,233,720,368,547,758 (practically unlimited)
+                                        // Set reasonable limit: 1 billion rubles (100,000,000,000 cents)
+                                        val amountValue = newValue.replace(',', '.').toDoubleOrNull()
+                                        if (amountValue != null && amountValue >= 0) {
+                                            val maxRubles = 1_000_000_000.0 // 1 billion rubles
+                                            if (amountValue <= maxRubles) {
+                                                amountText = newValue
+                                                tagAmounts = tagAmounts + (tag to newValue)
+                                            }
+                                            // If exceeds max, don't update - prevents overflow/formatting issues
+                                        }
+                                    }
                                 }
                             },
                             label = { Text("Сумма *") },

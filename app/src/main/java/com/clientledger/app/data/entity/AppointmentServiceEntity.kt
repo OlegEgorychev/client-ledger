@@ -32,6 +32,6 @@ data class AppointmentServiceEntity(
     val id: Long = 0,
     val appointmentId: Long,
     val serviceTagId: Long,
-    val priceForThisTag: Int, // in cents, allows override from default
+    val priceForThisTag: Long, // in cents, allows override from default
     val sortOrder: Int = 0 // for ordering tags in UI
 )

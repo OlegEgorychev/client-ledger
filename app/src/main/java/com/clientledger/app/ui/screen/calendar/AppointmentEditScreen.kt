@@ -72,7 +72,7 @@ fun AppointmentEditScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     // Service tags: selected tag IDs and their prices
     var selectedServiceTagIds by remember { mutableStateOf<List<Long>>(emptyList()) }
-    var serviceTagPrices by remember { mutableStateOf<Map<Long, Int>>(emptyMap()) } // tagId -> price in cents
+    var serviceTagPrices by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) } // tagId -> price in cents
     var availableTags by remember { mutableStateOf<List<ServiceTagEntity>>(emptyList()) }
     var showTagSelector by remember { mutableStateOf(false) }
     var clientNameText by remember { mutableStateOf("") }
@@ -424,13 +424,13 @@ fun AppointmentEditScreen(
                                 )
                                 
                                 // Price input for this tag
-                                val currentPrice = serviceTagPrices[tagId] ?: 0
+                                val currentPrice = serviceTagPrices[tagId] ?: 0L
                                 
                                 // Compute priceRubles based on currentPrice (only whole rubles, no kopecks)
                                 val priceRubles = remember(tagId, currentPrice) {
                                     if (currentPrice > 0) {
-                                        // Convert cents to whole rubles (integer division)
-                                        (currentPrice / 100).toString()
+                                                // Convert cents to whole rubles (integer division)
+                                                (currentPrice / 100L).toString()
                                     } else {
                                         ""
                                     }
@@ -440,8 +440,8 @@ fun AppointmentEditScreen(
                                 var priceText by remember(tagId) { 
                                     mutableStateOf(
                                         if (currentPrice > 0) {
-                                            // Convert cents to whole rubles (integer division)
-                                            (currentPrice / 100).toString()
+                                                // Convert cents to whole rubles (integer division)
+                                                (currentPrice / 100L).toString()
                                         } else {
                                             ""
                                         }
@@ -457,16 +457,27 @@ fun AppointmentEditScreen(
                                 
                                 // Check if price is empty (for error highlighting)
                                 // Show error immediately when price is empty - when tag is first added, currentPrice will be 0 and priceText will be empty
-                                val isPriceEmpty = priceText.isBlank() || currentPrice == 0
+                                val isPriceEmpty = priceText.isBlank() || currentPrice == 0L
                                 
                                 OutlinedTextField(
                                     value = priceText,
                                     onValueChange = { newValue ->
                                         if (newValue.all { c -> c.isDigit() }) {
-                                            priceText = newValue
-                                            val priceRubles = newValue.toIntOrNull() ?: 0
-                                            val priceCents = priceRubles * 100 // Convert rubles to cents
-                                            serviceTagPrices = serviceTagPrices + (tagId to priceCents)
+                                            if (newValue.isEmpty()) {
+                                                priceText = newValue
+                                                serviceTagPrices = serviceTagPrices + (tagId to 0L)
+                                            } else {
+                                                val priceRubles = newValue.toLongOrNull() ?: 0L
+                                                // Int max value in cents: 2,147,483,647
+                                                // Max rubles that fit in Int cents: 21,474,836
+                                                val maxRubles = 21474836L
+                                            if (priceRubles <= maxRubles) {
+                                                priceText = newValue
+                                                val priceCents = priceRubles * 100L // Convert rubles to cents
+                                                serviceTagPrices = serviceTagPrices + (tagId to priceCents)
+                                            }
+                                                // If exceeds max, don't update - prevents overflow
+                                            }
                                         }
                                     },
                                     label = { Text("Цена *") },
@@ -491,9 +502,14 @@ fun AppointmentEditScreen(
                     
                     // Total amount (sum of tag prices) - displayed as read-only field
                     val totalCents = selectedServiceTagIds.sumOf { tagId ->
-                        (serviceTagPrices[tagId] ?: 0).toLong()
+                        serviceTagPrices[tagId] ?: 0L
                     }
-                    val totalRubles = MoneyUtils.centsToRubles(totalCents).toString()
+                    // Convert cents to whole rubles (integer division) - avoid Double precision issues
+                    val totalRubles = if (totalCents > 0) {
+                        (totalCents / 100).toString()
+                    } else {
+                        "0"
+                    }
                     
                     // Update incomeRubles when total changes
                     LaunchedEffect(totalCents) {
@@ -1023,7 +1039,7 @@ fun AppointmentEditScreen(
                                 AppointmentServiceEntity(
                                     appointmentId = appointmentId ?: 0L, // Will be updated after appointment is saved
                                     serviceTagId = tagId,
-                                    priceForThisTag = serviceTagPrices[tagId] ?: 0,
+                                    priceForThisTag = serviceTagPrices[tagId] ?: 0L,
                                     sortOrder = index
                                 )
                             }

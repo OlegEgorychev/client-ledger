@@ -35,10 +35,20 @@ class LedgerApplication : Application() {
         // Initialize reminder scheduling based on preferences
         applicationScope.launch {
             val appPreferences = AppPreferences(this@LedgerApplication)
-            // Get current preference value and schedule
+            // Get current preference values and schedule both modes
             try {
-                val enabled = appPreferences.dailyReminderEnabled.first()
-                ReminderScheduler.scheduleDailyReminder(this@LedgerApplication, enabled)
+                val productionEnabled = appPreferences.dailyReminderEnabled.first()
+                val reminderHour = appPreferences.reminderHour.first()
+                val reminderMinute = appPreferences.reminderMinute.first()
+                ReminderScheduler.scheduleDailyReminder(
+                    this@LedgerApplication, 
+                    productionEnabled,
+                    hour = reminderHour,
+                    minute = reminderMinute
+                )
+                
+                val debugEnabled = appPreferences.debugReminderEnabled.first()
+                ReminderScheduler.scheduleDebugReminder(this@LedgerApplication, debugEnabled)
             } catch (e: Exception) {
                 // If error, schedule will be set when user toggles in Settings
             }

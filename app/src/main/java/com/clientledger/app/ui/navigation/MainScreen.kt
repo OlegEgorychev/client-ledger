@@ -445,6 +445,7 @@ fun MainScreen(
             composable("settings") {
                 SettingsScreen(
                     appPreferences = appPreferences,
+                    themePreferences = themePreferences,
                     onBack = { navController.popBackStack() }
                 )
             }

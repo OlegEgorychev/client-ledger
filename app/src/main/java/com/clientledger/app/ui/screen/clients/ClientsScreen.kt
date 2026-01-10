@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -32,6 +33,7 @@ import kotlinx.coroutines.CoroutineScope
 fun ClientsScreen(
     onClientClick: (Long) -> Unit,
     onAddClient: () -> Unit,
+    onSettingsClick: (() -> Unit)? = null,
     viewModel: ClientsViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -42,7 +44,16 @@ fun ClientsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Клиенты") })
+            TopAppBar(
+                title = { Text("Клиенты") },
+                actions = {
+                    if (onSettingsClick != null) {
+                        IconButton(onClick = { onSettingsClick() }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Настройки")
+                        }
+                    }
+                }
+            )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddClient) {

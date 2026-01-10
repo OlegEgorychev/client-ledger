@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -63,7 +64,8 @@ fun DayScheduleScreen(
     onExpenseClick: (Long) -> Unit,
     onAddAppointment: () -> Unit,
     onAddExpense: () -> Unit,
-    onDateChange: ((LocalDate) -> Unit)? = null
+    onDateChange: ((LocalDate) -> Unit)? = null,
+    onSettingsClick: (() -> Unit)? = null
 ) {
     // Используем date как источник истины для selectedDate
     var selectedDate by remember { mutableStateOf(date) }
@@ -211,6 +213,13 @@ fun DayScheduleScreen(
                 navigationIcon = {
                     // Кнопка "Назад" не нужна, так как BottomBar всегда виден
                     // Пользователь может переключиться на другую вкладку
+                },
+                actions = {
+                    if (onSettingsClick != null) {
+                        IconButton(onClick = { onSettingsClick() }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Настройки")
+                        }
+                    }
                 }
             )
         },

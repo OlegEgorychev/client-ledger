@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +38,7 @@ fun ClientDetailScreen(
     onBack: () -> Unit,
     onEdit: (Long) -> Unit,
     repository: LedgerRepository,
+    onSettingsClick: (() -> Unit)? = null,
     viewModel: ClientsViewModel = viewModel(
         factory = ClientsViewModelFactory(repository)
     )
@@ -77,6 +79,13 @@ fun ClientDetailScreen(
                             contentDescription = "Назад",
                             tint = MaterialTheme.colorScheme.onSurface
                         )
+                    }
+                },
+                actions = {
+                    if (onSettingsClick != null) {
+                        IconButton(onClick = { onSettingsClick() }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Настройки")
+                        }
                     }
                 }
             )

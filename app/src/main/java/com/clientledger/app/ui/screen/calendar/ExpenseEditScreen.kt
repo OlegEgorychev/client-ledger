@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -45,7 +46,8 @@ fun ExpenseEditScreen(
     expenseId: Long?,
     date: LocalDate,
     repository: LedgerRepository,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onSettingsClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val app = remember { context.applicationContext as? LedgerApplication }
@@ -133,6 +135,13 @@ fun ExpenseEditScreen(
                 navigationIcon = {
                     TextButton(onClick = onBack) {
                         Text("Назад")
+                    }
+                },
+                actions = {
+                    if (onSettingsClick != null) {
+                        IconButton(onClick = { onSettingsClick() }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Настройки")
+                        }
                     }
                 }
             )

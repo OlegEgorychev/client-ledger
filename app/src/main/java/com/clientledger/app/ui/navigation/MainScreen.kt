@@ -211,7 +211,10 @@ fun MainScreen(
                         onAddExpense = {
                             navController.navigate("expense_edit/null/${localDate.toString()}")
                         },
-                        onDateChange = null // Переключение дней происходит внутри экрана через состояние
+                        onDateChange = null, // Переключение дней происходит внутри экрана через состояние
+                        onSettingsClick = {
+                            navController.navigate("settings")
+                        }
                     )
                 }
             }
@@ -220,6 +223,9 @@ fun MainScreen(
                 ClientsScreen(
                     onClientClick = onClientClick,
                     onAddClient = onAddClient,
+                    onSettingsClick = {
+                        navController.navigate("settings")
+                    },
                     viewModel = viewModel(
                         factory = ClientsViewModelFactory(repository)
                     )
@@ -270,6 +276,9 @@ fun MainScreen(
                     },
                     onReportsClick = { period, date, yearMonth, year ->
                         navController.navigate("reports_insights/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
+                    },
+                    onSettingsClick = {
+                        navController.navigate("settings")
                     }
                 )
             }
@@ -305,7 +314,10 @@ fun MainScreen(
                     selectedYearMonth = yearMonth,
                     selectedYear = year,
                     repository = repository,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onSettingsClick = {
+                        navController.navigate("settings")
+                    }
                 )
             }
             
@@ -428,7 +440,10 @@ fun MainScreen(
                         date = localDate,
                         repository = repository,
                         viewModel = viewModel(factory = CalendarViewModelFactory(repository)),
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onSettingsClick = {
+                            navController.navigate("settings")
+                        }
                     )
                 }
             }
@@ -443,7 +458,10 @@ fun MainScreen(
                         expenseId = expenseId,
                         date = localDate,
                         repository = repository,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onSettingsClick = {
+                            navController.navigate("settings")
+                        }
                     )
                 }
             }

@@ -236,7 +236,10 @@ fun AppNavigation(
                     clientId = id,
                     onBack = { navController.popBackStack() },
                     onEdit = { navController.navigate("client_edit/$id") },
-                    repository = repository
+                    repository = repository,
+                    onSettingsClick = {
+                        navController.navigate("settings")
+                    }
                 )
             }
         }

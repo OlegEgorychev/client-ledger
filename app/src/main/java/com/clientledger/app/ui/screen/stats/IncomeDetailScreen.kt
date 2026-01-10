@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,7 +47,8 @@ fun IncomeDetailScreen(
     selectedYearMonth: YearMonth,
     selectedYear: Int,
     repository: com.clientledger.app.data.repository.LedgerRepository,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onSettingsClick: (() -> Unit)? = null
 ) {
     val viewModel: IncomeDetailViewModel = viewModel(
         factory = IncomeDetailViewModelFactory(repository, period, selectedDate, selectedYearMonth, selectedYear)
@@ -69,6 +72,13 @@ fun IncomeDetailScreen(
                 navigationIcon = {
                     TextButton(onClick = onBack) {
                         Text("Назад")
+                    }
+                },
+                actions = {
+                    if (onSettingsClick != null) {
+                        IconButton(onClick = { onSettingsClick() }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Настройки")
+                        }
                     }
                 }
             )

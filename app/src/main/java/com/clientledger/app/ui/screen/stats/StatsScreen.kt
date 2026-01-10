@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,14 +33,24 @@ fun StatsScreen(
     onIncomeClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> },
     onClientsClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> },
     onVisitsClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> },
-    onReportsClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> }
+    onReportsClick: (StatsPeriod, LocalDate, YearMonth, Int) -> Unit = { _, _, _, _ -> },
+    onSettingsClick: (() -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedSection by remember { mutableStateOf(StatsSection.INCOME) }
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Статистика") })
+            TopAppBar(
+                title = { Text("Статистика") },
+                actions = {
+                    if (onSettingsClick != null) {
+                        IconButton(onClick = { onSettingsClick() }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Настройки")
+                        }
+                    }
+                }
+            )
         }
     ) { paddingValues ->
         Column(

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Message
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.remember
@@ -62,7 +63,8 @@ fun AppointmentEditScreen(
     date: LocalDate,
     repository: LedgerRepository,
     viewModel: CalendarViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onSettingsClick: (() -> Unit)? = null
 ) {
     var selectedDate by remember { mutableStateOf(date) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -319,6 +321,13 @@ fun AppointmentEditScreen(
                         enabled = !uiState.isSaving
                     ) {
                         Text("Назад")
+                    }
+                },
+                actions = {
+                    if (onSettingsClick != null) {
+                        IconButton(onClick = { onSettingsClick() }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Настройки")
+                        }
                     }
                 }
             )

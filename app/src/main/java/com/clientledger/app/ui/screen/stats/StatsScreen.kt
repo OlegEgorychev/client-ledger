@@ -1,8 +1,10 @@
 package com.clientledger.app.ui.screen.stats
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -11,14 +13,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.ui.viewmodel.StatsPeriod
 import com.clientledger.app.ui.viewmodel.StatsUiState
 import com.clientledger.app.ui.viewmodel.StatsViewModel
+import com.clientledger.app.ui.components.PieChart
+import com.clientledger.app.ui.components.PieSegment
 import com.clientledger.app.util.*
 import com.clientledger.app.util.MoneyUtils
+import androidx.compose.ui.graphics.Color
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -257,6 +263,128 @@ private fun IncomeSection(
             comparison = uiState.incomeComparison
         )
         
+        // Pie chart: Income by service tags
+        if (uiState.incomeByTag.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = "Доходы по услугам",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    
+                    // Pie chart visualization
+                    val totalTagIncome = uiState.incomeByTag.sumOf { it.totalIncome }
+                    val chartColors = listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.secondary,
+                        MaterialTheme.colorScheme.tertiary,
+                        MaterialTheme.colorScheme.error,
+                        Color(0xFF9C27B0), // Purple
+                        Color(0xFF00BCD4), // Cyan
+                        Color(0xFFFF9800), // Orange
+                        Color(0xFF4CAF50), // Green
+                        Color(0xFFE91E63), // Pink
+                        Color(0xFF795548), // Brown
+                    )
+                    
+                    val pieSegments = uiState.incomeByTag.mapIndexed { index, tagIncome ->
+                        PieSegment(
+                            label = tagIncome.tagName,
+                            value = tagIncome.totalIncome,
+                            color = chartColors[index % chartColors.size]
+                        )
+                    }
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Pie chart
+                        PieChart(
+                            segments = pieSegments,
+                            modifier = Modifier.size(150.dp),
+                            size = 150.dp,
+                            strokeWidth = 0.dp,
+                            gapAngle = 2f
+                        )
+                        
+                        // Legend with percentages
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            uiState.incomeByTag.forEachIndexed { index, tagIncome ->
+                                val percentage = if (totalTagIncome > 0) {
+                                    (tagIncome.totalIncome.toDouble() / totalTagIncome) * 100
+                                } else 0.0
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Color indicator
+                                    Box(
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .background(
+                                                color = chartColors[index % chartColors.size],
+                                                shape = CircleShape
+                                            )
+                                    )
+                                    
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = tagIncome.tagName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${tagIncome.appointmentCount} услуг",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    
+                                    Column(
+                                        horizontalAlignment = Alignment.End
+                                    ) {
+                                        Text(
+                                            text = MoneyUtils.formatCents(tagIncome.totalIncome),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "${String.format("%.1f", percentage)}%",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         // Pie chart: Income by month (only for YEAR mode)
         if (uiState.period == StatsPeriod.YEAR && uiState.incomeByMonth.isNotEmpty()) {
             Card(
@@ -476,7 +604,7 @@ private fun ExpensesSection(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
                         text = "Расходы по категориям",
@@ -485,42 +613,96 @@ private fun ExpensesSection(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     
-                    // Tag breakdown list with percentages
+                    // Pie chart visualization
                     val totalTagExpenses = uiState.expensesByTag.sumOf { it.totalAmount }
-                    uiState.expensesByTag.forEach { tagExpense ->
-                        val percentage = if (totalTagExpenses > 0) {
-                            (tagExpense.totalAmount.toDouble() / totalTagExpenses) * 100
-                        } else 0.0
+                    val chartColors = listOf(
+                        MaterialTheme.colorScheme.error,
+                        Color(0xFFFF9800), // Orange
+                        Color(0xFF9C27B0), // Purple
+                        Color(0xFF00BCD4), // Cyan
+                        Color(0xFF4CAF50), // Green
+                        Color(0xFFE91E63), // Pink
+                        Color(0xFF795548), // Brown
+                        MaterialTheme.colorScheme.secondary,
+                        MaterialTheme.colorScheme.tertiary,
+                        MaterialTheme.colorScheme.primary,
+                    )
+                    
+                    val pieSegments = uiState.expensesByTag.mapIndexed { index, tagExpense ->
+                        PieSegment(
+                            label = tagExpense.tag.displayName,
+                            value = tagExpense.totalAmount,
+                            color = chartColors[index % chartColors.size]
+                        )
+                    }
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Pie chart
+                        PieChart(
+                            segments = pieSegments,
+                            modifier = Modifier.size(150.dp),
+                            size = 150.dp,
+                            strokeWidth = 0.dp,
+                            gapAngle = 2f
+                        )
                         
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        // Legend with percentages
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = tagExpense.tag.displayName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = MoneyUtils.formatCents(tagExpense.totalAmount),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                                Text(
-                                    text = "(${String.format("%.1f", percentage)}%)",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            uiState.expensesByTag.forEachIndexed { index, tagExpense ->
+                                val percentage = if (totalTagExpenses > 0) {
+                                    (tagExpense.totalAmount.toDouble() / totalTagExpenses) * 100
+                                } else 0.0
+                                
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Color indicator
+                                    Box(
+                                        modifier = Modifier
+                                            .size(12.dp)
+                                            .background(
+                                                color = chartColors[index % chartColors.size],
+                                                shape = CircleShape
+                                            )
+                                    )
+                                    
+                                    Text(
+                                        text = tagExpense.tag.displayName,
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    
+                                    Column(
+                                        horizontalAlignment = Alignment.End
+                                    ) {
+                                        Text(
+                                            text = MoneyUtils.formatCents(tagExpense.totalAmount),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                        Text(
+                                            text = "${String.format("%.1f", percentage)}%",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
-                    // TODO: Add pie chart visualization using Vico or DonutChart
                 }
             }
         }

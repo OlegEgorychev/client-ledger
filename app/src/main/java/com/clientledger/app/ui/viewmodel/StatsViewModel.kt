@@ -9,6 +9,7 @@ import com.clientledger.app.data.dao.MonthExpense
 import com.clientledger.app.data.dao.MonthIncome
 import com.clientledger.app.data.dao.SummaryStats
 import com.clientledger.app.data.dao.TagExpense
+import com.clientledger.app.data.dao.TagIncome
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.util.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,6 +65,7 @@ data class StatsUiState(
     val incomeSeries: List<DayIncome> = emptyList(), // For line chart
     val incomeByMonth: List<MonthIncome> = emptyList(), // For pie chart (year mode)
     val incomeByClient: List<ClientIncome> = emptyList(), // For pie chart (top clients)
+    val incomeByTag: List<TagIncome> = emptyList(), // For pie chart (income by service tags)
     val expensesByMonth: List<MonthExpense> = emptyList(), // For pie chart (expenses by month)
     val expensesByTag: List<TagExpense> = emptyList(), // For pie chart (expenses by tag)
     val isLoading: Boolean = false
@@ -228,6 +230,7 @@ class StatsViewModel(private val repository: LedgerRepository) : ViewModel() {
                 emptyList()
             }
             val incomeByClient = repository.getIncomeByClient(startDate, endDate)
+            val incomeByTag = repository.getIncomeByTag(startDate, endDate)
             val expensesByMonth = if (_uiState.value.period == StatsPeriod.YEAR) {
                 repository.getExpensesByMonth(startDate, endDate)
             } else {
@@ -256,6 +259,7 @@ class StatsViewModel(private val repository: LedgerRepository) : ViewModel() {
                 incomeSeries = incomeSeries,
                 incomeByMonth = incomeByMonth,
                 incomeByClient = incomeByClient,
+                incomeByTag = incomeByTag,
                 expensesByMonth = expensesByMonth,
                 expensesByTag = expensesByTag,
                 isLoading = false

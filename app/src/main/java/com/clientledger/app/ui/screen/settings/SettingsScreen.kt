@@ -362,6 +362,48 @@ fun SettingsScreen(
                             title = "Google Drive",
                             value = googleAccountEmail ?: "Авторизован"
                         )
+                        
+                        // Check backups in Drive button
+                        var checkingBackups by remember { mutableStateOf(false) }
+                        var backupsCount by remember { mutableStateOf<Int?>(null) }
+                        
+                        SettingsButtonRow(
+                            title = "Проверить бэкапы в Drive",
+                            description = if (backupsCount != null) "Найдено бэкапов: $backupsCount" else "Проверить наличие бэкапов в Google Drive",
+                            buttonText = if (checkingBackups) "Проверка..." else "Проверить",
+                            enabled = !checkingBackups && !isRestoring && !isBackingUp,
+                            onClick = {
+                                scope.launch {
+                                    checkingBackups = true
+                                    restoreError = null
+                                    try {
+                                        val backupsResult = service.listBackupsFromDrive()
+                                        backupsResult.onSuccess { backups ->
+                                            backupsCount = backups.size
+                                            if (backups.isEmpty()) {
+                                                restoreError = "Бэкапы в Google Drive не найдены. Убедитесь, что бэкапы загружаются успешно."
+                                            } else {
+                                                val latestBackup = backups[0]
+                                                val dateStr = java.time.Instant.ofEpochMilli(latestBackup.createdTime)
+                                                    .atZone(java.time.ZoneId.systemDefault())
+                                                    .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+                                                Toast.makeText(context, "Найдено бэкапов: ${backups.size}. Последний: $dateStr", Toast.LENGTH_LONG).show()
+                                                restoreError = null
+                                            }
+                                        }.onFailure { error ->
+                                            restoreError = "Ошибка проверки: ${error.message}"
+                                            backupsCount = null
+                                        }
+                                    } catch (e: Exception) {
+                                        restoreError = "Ошибка: ${e.message}"
+                                        backupsCount = null
+                                    } finally {
+                                        checkingBackups = false
+                                    }
+                                }
+                            }
+                        )
+                        
                         SettingsButtonRow(
                             title = "Выйти из Google",
                             description = "Отключить автоматическую загрузку в Google Drive",
@@ -372,6 +414,7 @@ fun SettingsScreen(
                                     service.signOut()
                                     isGoogleSignedIn = false
                                     googleAccountEmail = null
+                                    backupsCount = null
                                     Toast.makeText(context, "Выход выполнен", Toast.LENGTH_SHORT).show()
                                 }
                             }

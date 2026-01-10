@@ -121,10 +121,24 @@ class GoogleDriveBackupService(private val context: Context) {
             )
             
             val uploadedFile = driveService.files().create(fileMetadata, mediaContent)
-                .setFields("id, name")
+                .setFields("id, name, parents, createdTime")
                 .execute()
             
             Log.d(TAG, "Backup uploaded successfully: ${uploadedFile.id} - ${uploadedFile.name}")
+            Log.d(TAG, "Backup file parents: ${uploadedFile.parents}")
+            Log.d(TAG, "Backup file createdTime: ${uploadedFile.createdTime?.value}")
+            Log.d(TAG, "Backup uploaded to folder ID: $folderId")
+            
+            // Verify file was actually uploaded by getting it back
+            try {
+                val verifyFile = driveService.files().get(uploadedFile.id)
+                    .setFields("id, name, parents, createdTime, modifiedTime")
+                    .execute()
+                Log.d(TAG, "Verification: File exists with parents: ${verifyFile.parents}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Warning: Could not verify uploaded file", e)
+            }
+            
             Result.success(uploadedFile.id)
             
         } catch (e: Exception) {
@@ -140,19 +154,24 @@ class GoogleDriveBackupService(private val context: Context) {
         val folderName = "ClientLedger Backups"
         
         try {
-            // Search for existing folder
-            val query = "name='$folderName' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            // Search for existing folder - use escaped quotes for name
+            val query = "name = '$folderName' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            Log.d(TAG, "Searching for folder with query: $query")
+            
             val result = driveService.files().list()
                 .setQ(query)
                 .setSpaces("drive")
-                .setFields("files(id, name)")
+                .setFields("files(id, name, parents)")
                 .execute()
             
             val folders = result.files
             if (folders != null && folders.isNotEmpty()) {
-                // Folder exists, return its ID
-                return@withContext folders[0].id
+                val folder = folders[0]
+                Log.d(TAG, "Found existing backup folder: ${folder.id} - ${folder.name} (parents: ${folder.parents})")
+                return@withContext folder.id
             }
+            
+            Log.d(TAG, "Backup folder not found, creating new one...")
             
             // Folder doesn't exist, create it
             val folderMetadata = com.google.api.services.drive.model.File().apply {
@@ -161,14 +180,16 @@ class GoogleDriveBackupService(private val context: Context) {
             }
             
             val folder = driveService.files().create(folderMetadata)
-                .setFields("id")
+                .setFields("id, name, parents")
                 .execute()
             
-            Log.d(TAG, "Created backup folder: ${folder.id}")
+            Log.d(TAG, "Created backup folder: ${folder.id} - ${folder.name} (parents: ${folder.parents})")
             folder.id
             
         } catch (e: Exception) {
             Log.e(TAG, "Error finding/creating backup folder", e)
+            Log.e(TAG, "Exception details: ${e.javaClass.simpleName}: ${e.message}")
+            e.printStackTrace()
             throw e
         }
     }
@@ -200,27 +221,102 @@ class GoogleDriveBackupService(private val context: Context) {
                 .build()
             
             // Find backup folder
-            val folderId = findOrCreateBackupFolder(driveService)
-            
-            // List all backup files in the folder
-            val query = "parents in '$folderId' and name contains 'backup_' and name endsWith '.json' and trashed=false"
-            val result = driveService.files().list()
-                .setQ(query)
-                .setOrderBy("createdTime desc") // Newest first
-                .setFields("files(id, name, createdTime, modifiedTime)")
-                .execute()
-            
-            val files = result.files ?: emptyList()
-            val backupFiles = files.map { file ->
-                BackupFileInfo(
-                    fileId = file.id,
-                    fileName = file.name,
-                    createdTime = file.createdTime?.value ?: 0L,
-                    modifiedTime = file.modifiedTime?.value ?: 0L
-                )
+            val folderId = try {
+                findOrCreateBackupFolder(driveService)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error finding backup folder", e)
+                return@withContext Result.failure(Exception("Failed to find backup folder: ${e.message}"))
             }
             
-            Log.d(TAG, "Found ${backupFiles.size} backup files in Drive")
+            Log.d(TAG, "Searching for backups in folder ID: $folderId")
+            
+            // First, try to list ALL files in the folder to see what's there
+            val simpleQuery = "'$folderId' in parents and trashed = false"
+            Log.d(TAG, "Step 1: Simple query for all files in folder: $simpleQuery")
+            
+            val allFilesResult = try {
+                driveService.files().list()
+                    .setQ(simpleQuery)
+                    .setFields("files(id, name, createdTime, modifiedTime, parents, mimeType)")
+                    .setPageSize(100)
+                    .execute()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error listing all files in folder", e)
+                return@withContext Result.failure(Exception("Failed to list files in folder: ${e.message}"))
+            }
+            
+            val allFiles = allFilesResult.files ?: emptyList()
+            Log.d(TAG, "Total files in folder: ${allFiles.size}")
+            allFiles.forEach { file ->
+                Log.d(TAG, "  - File: ${file.name} (ID: ${file.id}, parents: ${file.parents}, mimeType: ${file.mimeType})")
+            }
+            
+            // Now filter backup files
+            val backupFiles = allFiles
+                .filter { file -> 
+                    file.name.startsWith("backup_", ignoreCase = true) &&
+                    file.name.endsWith(".json", ignoreCase = true)
+                }
+                .sortedByDescending { it.createdTime?.value ?: 0L }
+                .map { file ->
+                    Log.d(TAG, "Found backup file: ${file.name} (ID: ${file.id}, created: ${file.createdTime?.value})")
+                    BackupFileInfo(
+                        fileId = file.id,
+                        fileName = file.name,
+                        createdTime = file.createdTime?.value ?: 0L,
+                        modifiedTime = file.modifiedTime?.value ?: 0L
+                    )
+                }
+            
+            Log.d(TAG, "Found ${backupFiles.size} backup files after filtering")
+            
+            if (backupFiles.isEmpty()) {
+                // Try alternative search - search all files with "backup_" in name
+                Log.d(TAG, "No backups found in folder, trying alternative search...")
+                try {
+                    val altQuery = "name contains 'backup_' and trashed=false"
+                    val altResult = driveService.files().list()
+                        .setQ(altQuery)
+                        .setOrderBy("createdTime desc")
+                        .setFields("files(id, name, createdTime, modifiedTime, parents, mimeType)")
+                        .setPageSize(50)
+                        .execute()
+                    
+                    val altFiles = altResult.files ?: emptyList()
+                    Log.d(TAG, "Alternative search found ${altFiles.size} files with 'backup_' in name")
+                    
+                    // Filter JSON files and check if they're in the backup folder
+                    val altBackupFiles = altFiles
+                        .filter { file -> 
+                            file.name.endsWith(".json", ignoreCase = true) &&
+                            file.name.contains("backup_")
+                        }
+                        .map { file ->
+                            Log.d(TAG, "Alternative file: ${file.name} (ID: ${file.id}, parents: ${file.parents})")
+                            BackupFileInfo(
+                                fileId = file.id,
+                                fileName = file.name,
+                                createdTime = file.createdTime?.value ?: 0L,
+                                modifiedTime = file.modifiedTime?.value ?: 0L
+                            )
+                        }
+                    
+                    if (altBackupFiles.isNotEmpty()) {
+                        Log.d(TAG, "Found ${altBackupFiles.size} backup files via alternative search")
+                        return@withContext Result.success(altBackupFiles)
+                    }
+                    
+                    // Log all found files for debugging
+                    altFiles.take(10).forEach { file ->
+                        Log.d(TAG, "Found file (not backup): ${file.name} (parents: ${file.parents})")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in alternative search", e)
+                }
+                
+                return@withContext Result.failure(Exception("No backup files found in Google Drive. Make sure backups are being uploaded successfully. Check Logcat for details."))
+            }
+            
             Result.success(backupFiles)
             
         } catch (e: Exception) {

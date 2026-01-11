@@ -54,6 +54,8 @@ import com.clientledger.app.util.*
 import com.clientledger.app.util.MoneyUtils
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
@@ -224,21 +226,42 @@ fun AppointmentEditScreen(
         }
     }
     
-    // Поиск клиентов при вводе текста или при фокусе на поле
+    // Поиск клиентов при изменении текста или при фокусе
     LaunchedEffect(clientNameText, isFocused) {
-        if (clientNameText.isNotBlank()) {
-            repository.searchClients(clientNameText).collect { clients ->
+        if (isFocused) {
+            // При фокусе всегда показываем весь список клиентов, чтобы можно было выбрать другого
+            // Фильтрацию применяем только при вводе нового текста
+            repository.getAllClients().collect { clients ->
                 filteredClients = clients
-                if (isFocused) {
-                    showClientMenu = clients.isNotEmpty()
+                if (clients.isNotEmpty()) {
+                    showClientMenu = true
                 }
             }
         } else {
-            // При пустом поле показываем весь список клиентов по алфавиту
-            repository.getAllClients().collect { clients ->
+            // Когда поле не в фокусе, загружаем клиентов по тексту
+            if (clientNameText.isNotBlank()) {
+                repository.searchClients(clientNameText).collect { clients ->
+                    filteredClients = clients
+                }
+            } else {
+                repository.getAllClients().collect { clients ->
+                    filteredClients = clients
+                }
+            }
+        }
+    }
+    
+    // При вводе текста в режиме фокуса фильтруем список
+    LaunchedEffect(clientNameText) {
+        if (isFocused && clientNameText.isNotBlank()) {
+            // Если поле в фокусе и пользователь вводит текст, фильтруем список
+            repository.searchClients(clientNameText).collect { clients ->
                 filteredClients = clients
-                if (isFocused) {
-                    showClientMenu = clients.isNotEmpty()
+                // Открываем меню только если есть результаты поиска
+                if (clients.isNotEmpty()) {
+                    showClientMenu = true
+                } else {
+                    showClientMenu = false
                 }
             }
         }
@@ -271,10 +294,10 @@ fun AppointmentEditScreen(
                     selectedClientId = it.clientId
                     scope.launch {
                         val client = repository.getClientById(it.clientId)
-                        client?.let {
-                            clientNameText = "${it.firstName} ${it.lastName}"
-                            clientPhone = it.phone
-                        }
+                    client?.let {
+                        clientNameText = "${it.firstName} ${it.lastName}"
+                        clientPhone = it.phone
+                    }
                     }
                     val dateTime = DateUtils.dateTimeToLocalDateTime(it.startsAt)
                     selectedDate = dateTime.toLocalDate()
@@ -594,7 +617,17 @@ fun AppointmentEditScreen(
             Text("Клиент *", style = MaterialTheme.typography.labelSmall)
             ExposedDropdownMenuBox(
                 expanded = showClientMenu,
-                onExpandedChange = { showClientMenu = it }
+                onExpandedChange = { expanded ->
+                    showClientMenu = expanded
+                    // Если пользователь вручную открывает меню через клик на стрелку, убеждаемся что клиенты загружены
+                    if (expanded && filteredClients.isEmpty()) {
+                        scope.launch {
+                            repository.getAllClients().collect { clients ->
+                                filteredClients = clients
+                            }
+                        }
+                    }
+                }
             ) {
                 OutlinedTextField(
                     value = clientNameText,
@@ -610,7 +643,9 @@ fun AppointmentEditScreen(
                     enabled = !isFormDisabled,
                     interactionSource = interactionSource,
                     trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = showClientMenu)
+                        ExposedDropdownMenuDefaults.TrailingIcon(
+                            expanded = showClientMenu
+                        )
                     },
                     placeholder = { Text("Введите имя или фамилию") },
                     isError = invalidField == AppointmentFieldType.CLIENT || hasClientNameConflict,
@@ -637,9 +672,13 @@ fun AppointmentEditScreen(
                     }
                 )
                 ExposedDropdownMenu(
-                    expanded = showClientMenu,
+                    expanded = showClientMenu && filteredClients.isNotEmpty(),
                     onDismissRequest = { showClientMenu = false }
                 ) {
+                    if (filteredClients.isEmpty()) {
+                        // Не показываем пустое меню
+                        return@ExposedDropdownMenu
+                    }
                     filteredClients.forEach { client ->
                         DropdownMenuItem(
                             text = { Text("${client.firstName} ${client.lastName}") },
@@ -652,6 +691,8 @@ fun AppointmentEditScreen(
                                 showClientMenu = false
                                 // Закрываем клавиатуру при выборе клиента
                                 keyboardController?.hide()
+                                // Очищаем список клиентов, чтобы меню не открывалось снова при фокусе
+                                // (он загрузится заново при следующем фокусе через LaunchedEffect)
                             }
                         )
                     }
@@ -660,21 +701,22 @@ fun AppointmentEditScreen(
             
             // Кнопка "Выбрать клиента" при обнаружении дубля
             if (hasClientNameConflict && existingClientId != null) {
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            val client = repository.getClientById(existingClientId!!)
-                            client?.let {
-                                clientNameText = "${it.firstName} ${it.lastName}"
-                                selectedClientId = it.id
-                                clientPhone = it.phone
-                                hasClientNameConflict = false
-                                existingClientId = null
-                                // Закрываем клавиатуру при выборе клиента
-                                keyboardController?.hide()
+                    TextButton(
+                        onClick = {
+                            scope.launch {
+                                val client = repository.getClientById(existingClientId!!)
+                                client?.let {
+                                    clientNameText = "${it.firstName} ${it.lastName}"
+                                    selectedClientId = it.id
+                                    clientPhone = it.phone
+                                    hasClientNameConflict = false
+                                    existingClientId = null
+                                    showClientMenu = false // Закрываем меню при выборе клиента
+                                    // Закрываем клавиатуру при выборе клиента
+                                    keyboardController?.hide()
+                                }
                             }
-                        }
-                    },
+                        },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Выбрать клиента")

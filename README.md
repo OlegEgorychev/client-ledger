@@ -196,7 +196,7 @@ See `GOOGLE_DRIVE_SETUP.md` for detailed instructions.
 
 ## Version
 
-- **Current Version**: 0.1.18
+- **Current Version**: 0.1.21
 - **Version Code**: 19
 
 ## Notes

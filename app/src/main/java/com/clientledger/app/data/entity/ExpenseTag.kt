@@ -5,7 +5,9 @@ enum class ExpenseTag(val displayName: String) {
     RENT("Аренда"),
     PAINT("Краска"),
     TOOLS("Инструменты"),
-    SUPPLIES("Расходники");
+    SUPPLIES("Расходники"),
+    TRANSPORT("Проезд"),
+    MEAL("Обед");
     
     companion object {
         fun fromDisplayName(name: String): ExpenseTag? {

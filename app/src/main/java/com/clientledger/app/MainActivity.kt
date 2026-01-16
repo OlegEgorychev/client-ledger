@@ -20,6 +20,7 @@ import com.clientledger.app.ui.navigation.MainScreen
 import com.clientledger.app.ui.screen.SplashScreen
 import com.clientledger.app.ui.screen.calendar.AppointmentDetailsScreen
 import com.clientledger.app.ui.screen.calendar.AppointmentEditScreen
+import com.clientledger.app.ui.screen.calendar.AppointmentNotificationScreen
 import com.clientledger.app.ui.screen.calendar.DayDetailScreen
 import com.clientledger.app.ui.screen.calendar.DayScheduleScreen
 import com.clientledger.app.ui.screen.calendar.ExpenseEditScreen
@@ -316,6 +317,9 @@ fun AppNavigation(
                     onEdit = { appointmentId ->
                         // Получаем дату из appointment для навигации
                         navController.navigate("appointment_edit/$appointmentId")
+                    },
+                    onNotificationClick = { appointmentId ->
+                        navController.navigate("appointment_notification/$appointmentId")
                     }
                 )
             }
@@ -332,6 +336,17 @@ fun AppNavigation(
                     navController.popBackStack()
                 }
             )
+        }
+
+        composable("appointment_notification/{appointmentId}") { backStackEntry ->
+            val appointmentId = backStackEntry.arguments?.getString("appointmentId")?.toLongOrNull()
+            appointmentId?.let { id ->
+                AppointmentNotificationScreen(
+                    appointmentId = id,
+                    repository = repository,
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
 
         composable("expense_edit/{expenseId}/{date}") { backStackEntry ->

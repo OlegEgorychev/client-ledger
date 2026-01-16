@@ -7,7 +7,9 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Message
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,13 +22,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.navigation.AppointmentDetailsViewModelFactory
+import com.clientledger.app.ui.screen.reminders.formatServiceTagsForSms
 import com.clientledger.app.ui.viewmodel.AppointmentDetailsViewModel
 import com.clientledger.app.util.DateUtils
 import com.clientledger.app.util.MoneyUtils
 import com.clientledger.app.util.PhoneUtils
+import com.clientledger.app.util.SmsUtils
 import com.clientledger.app.util.TelegramUtils
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import android.content.Intent
+import android.net.Uri
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,7 +44,8 @@ fun AppointmentDetailsScreen(
     appointmentId: Long,
     repository: LedgerRepository,
     onBack: () -> Unit,
-    onEdit: (Long) -> Unit
+    onEdit: (Long) -> Unit,
+    onNotificationClick: (Long) -> Unit = {}
 ) {
     val viewModel: AppointmentDetailsViewModel = viewModel(
         factory = AppointmentDetailsViewModelFactory(appointmentId, repository)
@@ -92,7 +103,7 @@ fun AppointmentDetailsScreen(
                             text = "Ошибка: ${uiState.error}",
                             color = MaterialTheme.colorScheme.error
                         )
-                        Button(onClick = { viewModel.refresh() }) {
+                        OutlinedButton(onClick = { viewModel.refresh() }) {
                             Text("Повторить")
                         }
                     }
@@ -132,13 +143,15 @@ fun AppointmentDetailsScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     val isCanceled = uiState.appointment!!.status == com.clientledger.app.data.entity.AppointmentStatus.CANCELED.name
+                    val client = uiState.client
+                    val hasPhone = client?.phone?.isNotBlank() == true && SmsUtils.isValidPhoneForSms(client.phone)
                     
                     // Primary actions
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Button(
+                        OutlinedButton(
                             onClick = { onEdit(appointmentId) },
                             modifier = Modifier.weight(1f),
                             enabled = !isCanceled
@@ -165,6 +178,22 @@ fun AppointmentDetailsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Удалить")
+                        }
+                    }
+                    
+                    // Notification button
+                    if (hasPhone && !isCanceled) {
+                        OutlinedButton(
+                            onClick = { onNotificationClick(appointmentId) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Уведомление")
                         }
                     }
                     
@@ -477,3 +506,93 @@ fun TelegramInfoRow(
     }
 }
 
+/**
+ * Sends SMS notification to client about the appointment
+ */
+suspend fun sendNotificationSms(
+    context: android.content.Context,
+    repository: LedgerRepository,
+    appointment: com.clientledger.app.data.entity.AppointmentEntity,
+    client: com.clientledger.app.data.entity.ClientEntity,
+    snackbarHostState: SnackbarHostState
+) {
+    val phone = client.phone
+    if (phone.isNullOrBlank() || !SmsUtils.isValidPhoneForSms(phone)) {
+        withContext(Dispatchers.Main) {
+            snackbarHostState.showSnackbar(
+                message = "Нет номера телефона для отправки уведомления",
+                duration = SnackbarDuration.Short
+            )
+        }
+        return
+    }
+    
+    // Normalize phone number
+    val normalizedPhone = phone.trim().replace("\\s+".toRegex(), "").replace("-", "")
+    
+    // Format date and time
+    val dateTime = DateUtils.dateTimeToLocalDateTime(appointment.startsAt)
+    val formattedTime = dateTime.format(DateTimeFormatter.ofPattern("HH:mm", Locale("ru")))
+    val formattedDate = dateTime.format(DateTimeFormatter.ofPattern("d MMMM", Locale("ru")))
+    
+    // Format service tags
+    val serviceTags = formatServiceTagsForSms(repository, appointment.id)
+    
+    // Build message (same format as in AppointmentEditScreen)
+    val message = buildString {
+        append("Здравствуйте!\n")
+        append("Напоминаю, что у вас запись $formattedDate в $formattedTime")
+        if (serviceTags.isNotEmpty()) {
+            append(" $serviceTags") // serviceTags already includes "— ", so add space before
+        }
+        append(".\n")
+        append("Если планы изменились — пожалуйста, сообщите заранее.\n")
+        append("Спасибо!")
+    }
+    
+    // Try to open SMS composer
+    val success = try {
+        val uri = Uri.parse("smsto:$normalizedPhone")
+        val intent = Intent(Intent.ACTION_SENDTO, uri).apply {
+            putExtra("sms_body", message)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        
+        var intentLaunched = false
+        try {
+            context.startActivity(intent)
+            intentLaunched = true
+        } catch (e: android.content.ActivityNotFoundException) {
+            // Try alternative method
+            try {
+                val alternativeIntent = Intent(Intent.ACTION_VIEW).apply {
+                    data = Uri.parse("sms:$normalizedPhone")
+                    putExtra("sms_body", message)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(alternativeIntent)
+                intentLaunched = true
+            } catch (e2: Exception) {
+                false
+            }
+        }
+        intentLaunched
+    } catch (e: Exception) {
+        false
+    }
+    
+    // Show feedback
+    withContext(Dispatchers.Main) {
+        if (success) {
+            snackbarHostState.showSnackbar(
+                message = "Открыто SMS приложение для ${client.firstName} ${client.lastName}",
+                duration = SnackbarDuration.Short
+            )
+        } else {
+            snackbarHostState.showSnackbar(
+                message = "Не удалось открыть SMS приложение",
+                duration = SnackbarDuration.Long
+            )
+        }
+    }
+}

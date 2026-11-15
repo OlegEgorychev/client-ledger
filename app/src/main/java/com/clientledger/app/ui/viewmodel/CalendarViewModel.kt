@@ -281,7 +281,9 @@ class CalendarViewModel(private val repository: LedgerRepository) : ViewModel() 
         excludeAppointmentId: Long? = null
     ): Boolean {
         // Получаем все записи за день, исключая редактируемую
+        // Отменённые записи время не занимают
         val existingAppointments = repository.getAppointmentsByDateExcluding(dateKey, excludeAppointmentId)
+            .filter { it.status != com.clientledger.app.data.entity.AppointmentStatus.CANCELED.name }
         
         // Вычисляем время начала и окончания новой записи в миллисекундах
         val date = dateKey.toLocalDate()

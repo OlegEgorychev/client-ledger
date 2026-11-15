@@ -1209,8 +1209,11 @@ fun AppointmentEditScreen(
                 }
             }
             
-            // Отображение подсказки, если кнопка неактивна
-            if (!isSaveEnabled && saveDisabledReason != null) {
+            // Отображение подсказки, если кнопка неактивна.
+            // Ошибки времени уже показаны под выбором времени — не дублируем их здесь.
+            val isTimeError = invalidField == AppointmentFieldType.TIME_RANGE ||
+                invalidField == AppointmentFieldType.TIME_OVERLAP
+            if (!isSaveEnabled && saveDisabledReason != null && !isTimeError) {
                 Text(
                     text = saveDisabledReason,
                     color = MaterialTheme.colorScheme.error,

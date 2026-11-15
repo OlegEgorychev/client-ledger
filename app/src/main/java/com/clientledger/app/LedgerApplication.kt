@@ -27,7 +27,8 @@ class LedgerApplication : Application() {
             database.expenseDao(),
             database.expenseItemDao(),
             database.serviceTagDao(),
-            database.appointmentServiceDao()
+            database.appointmentServiceDao(),
+            database.personalEventDao()
         )
     }
     
@@ -61,7 +62,8 @@ class LedgerApplication : Application() {
             "appointment_services",
             "expenses",
             "expense_items",
-            "service_tags"
+            "service_tags",
+            "personal_events"
         )
     ) {
         override fun onInvalidated(tables: Set<String>) {

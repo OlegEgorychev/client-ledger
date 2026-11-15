@@ -50,6 +50,7 @@ fun CalendarScreen(
     onDateLongClick: (LocalDate) -> Unit, // Long press opens Day Schedule
     onAddAppointment: (LocalDate) -> Unit, // Pass selected date
     onAddExpense: (LocalDate) -> Unit, // Pass selected date
+    onAddPersonalEvent: ((LocalDate) -> Unit)? = null,
     onIncomeDetailClick: ((com.clientledger.app.ui.viewmodel.StatsPeriod, LocalDate, YearMonth, Int) -> Unit)? = null,
     onSettingsClick: (() -> Unit)? = null, // Navigate to Settings
     repository: com.clientledger.app.data.repository.LedgerRepository? = null,
@@ -90,7 +91,8 @@ fun CalendarScreen(
                 AddChooserDialog(
                     onDismiss = { showAddChooser = false },
                     onAddAppointment = { onAddAppointment(selectedDate) },
-                    onAddExpense = { onAddExpense(selectedDate) }
+                    onAddExpense = { onAddExpense(selectedDate) },
+                    onAddPersonalEvent = onAddPersonalEvent?.let { add -> { add(selectedDate) } }
                 )
             }
         }
@@ -133,6 +135,7 @@ fun CalendarScreen(
                         month = uiState.currentMonth,
                         workingDays = uiState.workingDays,
                         expenseDays = uiState.expenseDays,
+                        personalEventDays = uiState.personalEventDays,
                         selectedDate = uiState.selectedDate,
                         onDateClick = { date ->
                             // Single tap: only select the date (no navigation)
@@ -199,6 +202,7 @@ fun CalendarGrid(
     month: YearMonth,
     workingDays: Set<String>,
     expenseDays: Set<String>,
+    personalEventDays: Set<String> = emptySet(),
     selectedDate: LocalDate?,
     onDateClick: (LocalDate) -> Unit,
     onDateLongClick: (LocalDate) -> Unit
@@ -247,6 +251,7 @@ fun CalendarGrid(
                         val dateKey = date.toDateKey()
                         val hasAppointments = workingDays.contains(dateKey)
                         val hasExpenses = expenseDays.contains(dateKey)
+                        val hasPersonalEvents = personalEventDays.contains(dateKey)
                         // dayOfWeek: 0 = понедельник, 5 = суббота, 6 = воскресенье
                         val isWeekend = dayOfWeek == 5 || dayOfWeek == 6
                         
@@ -256,6 +261,7 @@ fun CalendarGrid(
                             isSelected = isSelected,
                             hasAppointments = hasAppointments,
                             hasExpenses = hasExpenses,
+                            hasPersonalEvents = hasPersonalEvents,
                             isWeekend = isWeekend,
                             onClick = { onDateClick(date) },
                             onLongClick = { onDateLongClick(date) },
@@ -280,6 +286,7 @@ fun CalendarDayCell(
     isSelected: Boolean,
     hasAppointments: Boolean,
     hasExpenses: Boolean,
+    hasPersonalEvents: Boolean = false,
     isWeekend: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -316,6 +323,21 @@ fun CalendarDayCell(
             )
         }
         
+        // Personal events indicator: vertical bar on the right side (mirrors expenses bar)
+        if (hasPersonalEvents) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .width(2.dp)
+                    .fillMaxHeight(0.7f)
+                    .padding(end = 1.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
+                        shape = RoundedCornerShape(1.dp)
+                    )
+            )
+        }
+
         // Single clear selection marker: filled circle for selected date.
         // If not selected, optionally outline "today" (subtle, secondary).
         val circleModifier = Modifier.fillMaxSize(0.7f)

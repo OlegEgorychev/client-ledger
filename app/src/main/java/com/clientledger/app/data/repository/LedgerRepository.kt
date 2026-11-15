@@ -10,6 +10,7 @@ import com.clientledger.app.data.dao.ExpenseDao
 import com.clientledger.app.data.dao.ExpenseItemDao
 import com.clientledger.app.data.dao.MonthExpense
 import com.clientledger.app.data.dao.MonthIncome
+import com.clientledger.app.data.dao.PersonalEventDao
 import com.clientledger.app.data.dao.ServiceTagDao
 import com.clientledger.app.data.dao.SummaryStats
 import com.clientledger.app.data.dao.TagExpense
@@ -21,6 +22,7 @@ import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.entity.ExpenseEntity
 import com.clientledger.app.data.entity.ExpenseItemEntity
 import com.clientledger.app.data.entity.ExpenseTag
+import com.clientledger.app.data.entity.PersonalEventEntity
 import com.clientledger.app.data.entity.ServiceTagEntity
 import com.clientledger.app.data.testdata.TestDataGenerator
 import com.clientledger.app.util.DateUtils
@@ -38,7 +40,8 @@ class LedgerRepository(
     private val expenseDao: ExpenseDao,
     private val expenseItemDao: ExpenseItemDao,
     private val serviceTagDao: ServiceTagDao,
-    private val appointmentServiceDao: AppointmentServiceDao
+    private val appointmentServiceDao: AppointmentServiceDao,
+    private val personalEventDao: PersonalEventDao
 ) {
     /**
      * Выполнить несколько операций как одну: либо все применятся, либо ни одна.
@@ -103,6 +106,45 @@ class LedgerRepository(
         appointmentServiceDao.deleteServicesForAppointment(appointment.id)
         appointmentDao.deleteAppointment(appointment)
     }
+
+    // Personal events (личные дела)
+    fun getPersonalEventsByDate(dateKey: String): Flow<List<PersonalEventEntity>> =
+        personalEventDao.getByDate(dateKey)
+
+    suspend fun getPersonalEventById(id: Long): PersonalEventEntity? = personalEventDao.getById(id)
+
+    suspend fun getPersonalEventDaysInRange(startDate: String, endDate: String): List<String> =
+        personalEventDao.getDaysInRange(startDate, endDate)
+
+    suspend fun getAllPersonalEventsSync(): List<PersonalEventEntity> = personalEventDao.getAll()
+
+    /** Сохранить личное дело (новое или существующее). Возвращает id. */
+    suspend fun savePersonalEvent(event: PersonalEventEntity): Long = inTransaction {
+        if (event.id == 0L) {
+            personalEventDao.insert(event)
+        } else {
+            val existing = personalEventDao.getById(event.id)
+            personalEventDao.update(event.copy(createdAt = existing?.createdAt ?: event.createdAt))
+            event.id
+        }
+    }
+
+    suspend fun insertPersonalEvent(event: PersonalEventEntity): Long = personalEventDao.insert(event)
+
+    suspend fun deletePersonalEvent(event: PersonalEventEntity) = personalEventDao.delete(event)
+
+    /**
+     * Личные дела, пересекающиеся с интервалом [startMinute, endMinute) в указанный день.
+     * Дела «на весь день» пересекаются с любым временем.
+     */
+    suspend fun findPersonalEventConflicts(
+        dateKey: String,
+        startMinute: Int,
+        endMinute: Int,
+        excludeEventId: Long? = null
+    ): List<PersonalEventEntity> =
+        personalEventDao.getByDateOnce(dateKey)
+            .filter { it.id != excludeEventId && it.overlaps(startMinute, endMinute) }
 
     // Expenses
     fun getExpensesByDate(dateKey: String): Flow<List<ExpenseEntity>> =
@@ -473,6 +515,8 @@ class LedgerRepository(
         getAllClientsSync().forEach { deleteClient(it) }
         // 6. Service tags (no dependencies, but appointment services reference them)
         getAllTagsSync().forEach { deleteTag(it) }
+        // 7. Personal events (no dependencies)
+        personalEventDao.deleteAll()
     }
     
     /**
@@ -483,7 +527,9 @@ class LedgerRepository(
         val clientsCount = getAllClientsSync().size
         val appointmentsCount = getAllAppointmentsSync().size
         val expensesCount = getAllExpensesSync().size
-        return clientsCount == 0 && appointmentsCount == 0 && expensesCount == 0
+        val personalEventsCount = personalEventDao.getAll().size
+        return clientsCount == 0 && appointmentsCount == 0 && expensesCount == 0 &&
+            personalEventsCount == 0
     }
 }
 

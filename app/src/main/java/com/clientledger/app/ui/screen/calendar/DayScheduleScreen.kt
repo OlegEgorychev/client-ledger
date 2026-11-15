@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.ExpenseEntity
+import com.clientledger.app.data.entity.PersonalEventEntity
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.ui.navigation.DayScheduleViewModelFactory
 import com.clientledger.app.ui.viewmodel.DayScheduleViewModel
@@ -53,6 +54,7 @@ private const val WORKING_HOURS_END = 21 // Рабочие часы заканч
 private const val WORKING_HOURS_COUNT = WORKING_HOURS_END - WORKING_HOURS_START + 1 // 13 часов (09:00-21:00 inclusive)
 private const val SLOTS_PER_WORKING_DAY = WORKING_HOURS_COUNT * SLOTS_PER_HOUR // 156 слотов (13 часов * 12 слотов)
 private const val SLOT_HEIGHT_DP = 10f // Высота одного 5-минутного слота в dp
+private const val PERSONAL_LANE_FRACTION = 0.3f // Ширина полосы личного дела при пересечении с записью
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +66,8 @@ fun DayScheduleScreen(
     onExpenseClick: (Long) -> Unit,
     onAddAppointment: () -> Unit,
     onAddExpense: () -> Unit,
+    onAddPersonalEvent: ((LocalDate) -> Unit)? = null,
+    onPersonalEventClick: ((Long) -> Unit)? = null,
     onDateChange: ((LocalDate) -> Unit)? = null,
     onSettingsClick: (() -> Unit)? = null
 ) {
@@ -239,7 +243,8 @@ fun DayScheduleScreen(
                 AddChooserDialog(
                     onDismiss = { showAddChooser = false },
                     onAddAppointment = onAddAppointment,
-                    onAddExpense = onAddExpense
+                    onAddExpense = onAddExpense,
+                    onAddPersonalEvent = onAddPersonalEvent?.let { add -> { add(selectedDate) } }
                 )
             }
         }
@@ -277,6 +282,8 @@ fun DayScheduleScreen(
             DayScheduleContent(
                 appointments = uiState.appointments,
                 expenses = uiState.expenses,
+                personalEvents = uiState.personalEvents,
+                onPersonalEventClick = { eventId -> onPersonalEventClick?.invoke(eventId) },
                 isToday = isToday,
                 viewModel = viewModel,
                 onAppointmentClick = { appointmentId ->
@@ -455,6 +462,8 @@ fun overlaps(block1: TimelineBlock, block2: TimelineBlock): Boolean {
 fun DayScheduleContent(
     appointments: List<AppointmentWithClient>,
     expenses: List<ExpenseEntity>,
+    personalEvents: List<PersonalEventEntity> = emptyList(),
+    onPersonalEventClick: (Long) -> Unit = {},
     isToday: Boolean,
     viewModel: DayScheduleViewModel,
     onAppointmentClick: (Long) -> Unit,
@@ -494,6 +503,16 @@ fun DayScheduleContent(
         (hour == WORKING_HOURS_END && minute == 0)
     }
     
+    // Личные дела: на шкале — только по времени в пределах 09:00–21:00,
+    // остальные (весь день / вне рабочих часов) — плашками над шкалой
+    val timelineStartMinutes = WORKING_HOURS_START * MINUTES_PER_HOUR
+    val timelineEndMinutes = (WORKING_HOURS_END + 1) * MINUTES_PER_HOUR
+    val (timelinePersonalEvents, bannerPersonalEvents) = personalEvents.partition { event ->
+        !event.isAllDay &&
+            event.startMinute < timelineEndMinutes &&
+            event.endMinute > timelineStartMinutes
+    }
+
     // Автопрокрутка к ближайшей записи при открытии экрана, обновлении записей или смене даты
     // Добавляем viewModel.uiState.value.date в зависимости, чтобы автоскролл срабатывал при смене даты
     val currentDate = viewModel.uiState.value.date
@@ -510,6 +529,16 @@ fun DayScheduleContent(
             .fillMaxSize()
             .verticalScroll(scrollState)
     ) {
+        // Личные дела на весь день и вне рабочих часов
+        if (bannerPersonalEvents.isNotEmpty()) {
+            PersonalEventsBanner(
+                events = bannerPersonalEvents,
+                onClick = onPersonalEventClick,
+                modifier = Modifier.fillMaxWidth()
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        }
+
         // Out-of-range section (items before 09:00 or after 21:00)
         if (outOfRangeAppointments.isNotEmpty() || outOfRangeExpenses.isNotEmpty()) {
             OutOfRangeSection(
@@ -577,8 +606,38 @@ fun DayScheduleContent(
                         slotHeightPx = slotHeightPx
                     )
                     
+                    // Личные дела рисуем под записями. Если дело пересекается с записью/расходом —
+                    // оно уходит в узкую полосу справа, а запись сужается, чтобы было видно оба.
+                    val personalEventRanges = timelinePersonalEvents.map { event ->
+                        val startMin = max(event.startMinute, timelineStartMinutes) - timelineStartMinutes
+                        val endMin = minOf(event.endMinute, timelineEndMinutes) - timelineStartMinutes
+                        val topPx = (startMin / STEP_MINUTES) * slotHeightPx
+                        val bottomPx = ((endMin + STEP_MINUTES - 1) / STEP_MINUTES) * slotHeightPx
+                        Triple(event, topPx, max(bottomPx - topPx, slotHeightPx * 3))
+                    }
+                    fun rangesOverlap(top1: Float, h1: Float, top2: Float, h2: Float) =
+                        top1 < top2 + h2 && top2 < top1 + h1
+
+                    personalEventRanges.forEach { (event, topPx, heightPx) ->
+                        val sharesTime = timelineBlocks.any { rangesOverlap(it.topPx, it.heightPx, topPx, heightPx) }
+                        PersonalEventCardOnTimeline(
+                            event = event,
+                            topPx = topPx,
+                            heightPx = heightPx,
+                            density = density,
+                            widthFraction = if (sharesTime) PERSONAL_LANE_FRACTION else 1f,
+                            offsetFraction = if (sharesTime) 1f - PERSONAL_LANE_FRACTION else 0f,
+                            onClick = { onPersonalEventClick(event.id) }
+                        )
+                    }
+
                     // Render timeline blocks
                     timelineBlocks.forEach { block ->
+                        val overlapsPersonal = personalEventRanges.any { (_, topPx, heightPx) ->
+                            rangesOverlap(block.topPx, block.heightPx, topPx, heightPx)
+                        }
+                        // Сужаем только блоки на всю ширину, чтобы не ломать раскладку «запись + расход»
+                        val narrow = overlapsPersonal && block.widthFraction == 1f
                         when (block) {
                             is TimelineBlock.AppointmentBlock -> {
                                 AppointmentCardOnTimeline(
@@ -588,7 +647,7 @@ fun DayScheduleContent(
                                     density = density,
                                     hasNextAdjacent = block.hasNextAdjacent,
                                     hasPrevAdjacent = block.hasPrevAdjacent,
-                                    widthFraction = block.widthFraction,
+                                    widthFraction = if (narrow) 1f - PERSONAL_LANE_FRACTION else block.widthFraction,
                                     offsetFraction = block.offsetFraction,
                                     onClick = { onAppointmentClick(block.appointment.appointment.id) }
                                 )
@@ -598,7 +657,7 @@ fun DayScheduleContent(
                                     expense = block.expense,
                                     slotHeightPx = slotHeightPx,
                                     density = density,
-                                    widthFraction = block.widthFraction,
+                                    widthFraction = if (narrow) 1f - PERSONAL_LANE_FRACTION else block.widthFraction,
                                     offsetFraction = block.offsetFraction,
                                     onClick = { onExpenseClick(block.expense.id) }
                                 )
@@ -1211,3 +1270,112 @@ fun OutOfRangeSection(
     }
 }
 
+
+@Composable
+fun PersonalEventCardOnTimeline(
+    event: PersonalEventEntity,
+    topPx: Float,
+    heightPx: Float,
+    density: androidx.compose.ui.unit.Density,
+    widthFraction: Float,
+    offsetFraction: Float,
+    onClick: () -> Unit
+) {
+    val cardHeightDp = with(density) { heightPx.toDp() }
+    val colorScheme = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(8.dp)
+
+    Box(
+        modifier = Modifier
+            .offset { IntOffset(0, topPx.toInt()) }
+            .fillMaxWidth()
+            .height(cardHeightDp)
+    ) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (offsetFraction > 0f) {
+                Spacer(modifier = Modifier.fillMaxWidth(offsetFraction))
+            }
+            Card(
+                onClick = onClick,
+                modifier = Modifier
+                    .fillMaxWidth(if (offsetFraction > 0f) 1f else widthFraction)
+                    .fillMaxHeight()
+                    .padding(horizontal = 4.dp)
+                    .border(width = 1.dp, color = colorScheme.tertiary.copy(alpha = 0.6f), shape = shape),
+                shape = shape,
+                colors = CardDefaults.cardColors(
+                    containerColor = colorScheme.tertiaryContainer.copy(alpha = 0.6f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = event.title,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = colorScheme.onTertiaryContainer,
+                        maxLines = 2
+                    )
+                    Text(
+                        text = event.timeRangeText(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PersonalEventsBanner(
+    events: List<PersonalEventEntity>,
+    onClick: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Личные дела",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        events.forEach { event ->
+            Card(
+                onClick = { onClick(event.id) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = event.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        text = event.timeRangeText(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                    )
+                    event.note?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

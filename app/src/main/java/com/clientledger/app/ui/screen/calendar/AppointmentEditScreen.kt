@@ -157,6 +157,22 @@ fun AppointmentEditScreen(
         }
     }
     
+    // Личные дела в выбранное время — только предупреждение, сохранять можно
+    var personalEventConflicts by remember {
+        mutableStateOf<List<com.clientledger.app.data.entity.PersonalEventEntity>>(emptyList())
+    }
+    LaunchedEffect(selectedDate, startHour, startMinute, endHour, endMinute) {
+        personalEventConflicts = if (viewModel.validateTimeRange(startHour, startMinute, endHour, endMinute)) {
+            repository.findPersonalEventConflicts(
+                dateKey = selectedDate.toDateKey(),
+                startMinute = startHour * 60 + startMinute,
+                endMinute = endHour * 60 + endMinute
+            )
+        } else {
+            emptyList()
+        }
+    }
+
     // Валидация времени
     val isTimeRangeValid = remember(startHour, startMinute, endHour, endMinute) {
         viewModel.validateTimeRange(startHour, startMinute, endHour, endMinute)
@@ -1024,6 +1040,17 @@ fun AppointmentEditScreen(
                 }
             }
             
+            // Предупреждение: время занято личным делом (не блокирует сохранение)
+            if (personalEventConflicts.isNotEmpty()) {
+                Text(
+                    text = "Это время занято личным делом: " +
+                        personalEventConflicts.joinToString(", ") { "${it.title} (${it.timeRangeText()})" },
+                    color = MaterialTheme.colorScheme.tertiary,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+                )
+            }
+
             // Сообщение об ошибке времени (показываем под блоком выбора времени)
             if ((invalidField == AppointmentFieldType.TIME_RANGE || invalidField == AppointmentFieldType.TIME_OVERLAP) && saveDisabledReason != null) {
                 Text(

@@ -35,6 +35,11 @@ Client Ledger is an Android application built with Jetpack Compose and Room data
 - Create new clients on the fly when adding appointments
 - Multiple services per appointment with tags
 
+### Personal Events
+- Block time for personal matters (doctor, meeting, day off) — timed or all-day
+- Shown on the day timeline and marked in the monthly calendar
+- Warning (non-blocking) when booking a client over a personal event
+
 ### Expenses
 - Track daily expenses with multiple items
 - View expenses by date
@@ -70,7 +75,7 @@ Client Ledger is an Android application built with Jetpack Compose and Room data
 
 - **Language**: Kotlin
 - **UI Framework**: Jetpack Compose (Material 3)
-- **Database**: Room Persistence Library (schema version 8)
+- **Database**: Room Persistence Library (schema version 10, migrations with exported schemas in `app/schemas`)
 - **Architecture**: MVVM (Model-View-ViewModel)
 - **Navigation**: Navigation Compose
 - **Coroutines**: Kotlin Coroutines for asynchronous operations

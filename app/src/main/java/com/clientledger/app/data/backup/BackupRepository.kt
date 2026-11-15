@@ -26,8 +26,8 @@ private const val TAG = "BackupRepository"
 private const val BACKUP_DIR = "backups"
 private const val LATEST_BACKUP_FILE = "latest_backup.json"
 private const val HISTORY_DIR = "history"
-private const val MAX_HISTORY_BACKUPS = 10
-private const val CURRENT_SCHEMA_VERSION = 8
+private const val MAX_HISTORY_BACKUPS = 30
+private const val CURRENT_SCHEMA_VERSION = 9
 
 /**
  * Repository for creating, reading, and restoring backups.
@@ -187,79 +187,83 @@ class BackupRepository(
                 )
             }
             
-            // Clear all existing data
-            repository.clearAllDataForRestore()
+            // Всё восстановление — одна транзакция: если что-то упадёт посередине,
+            // текущие данные останутся нетронутыми, а не наполовину стёртыми.
+            repository.inTransaction {
+                // Clear all existing data
+                repository.clearAllDataForRestore()
             
-            // ID mappings for maintaining referential integrity
-            val clientIdMap = mutableMapOf<Long, Long>()
-            val appointmentIdMap = mutableMapOf<Long, Long>()
-            val expenseIdMap = mutableMapOf<Long, Long>()
-            val serviceTagIdMap = mutableMapOf<Long, Long>()
+                // ID mappings for maintaining referential integrity
+                val clientIdMap = mutableMapOf<Long, Long>()
+                val appointmentIdMap = mutableMapOf<Long, Long>()
+                val expenseIdMap = mutableMapOf<Long, Long>()
+                val serviceTagIdMap = mutableMapOf<Long, Long>()
             
-            // 1. Insert clients (no dependencies)
-            payload.clients.forEach { backupClient ->
-                val newId = repository.insertClient(backupClient.copy(id = 0))
-                clientIdMap[backupClient.id] = newId
-            }
+                // 1. Insert clients (no dependencies)
+                payload.clients.forEach { backupClient ->
+                    val newId = repository.insertClient(backupClient.copy(id = 0))
+                    clientIdMap[backupClient.id] = newId
+                }
             
-            // 2. Insert service tags (no dependencies)
-            payload.serviceTags.forEach { backupTag ->
-                val newId = repository.insertTag(backupTag.copy(id = 0))
-                serviceTagIdMap[backupTag.id] = newId
-            }
+                // 2. Insert service tags (no dependencies)
+                payload.serviceTags.forEach { backupTag ->
+                    val newId = repository.insertTag(backupTag.copy(id = 0))
+                    serviceTagIdMap[backupTag.id] = newId
+                }
             
-            // 3. Insert appointments (depends on clients)
-            payload.appointments.forEach { backupAppointment ->
-                val newClientId = clientIdMap[backupAppointment.clientId] ?: backupAppointment.clientId
-                val newId = repository.insertAppointment(
-                    backupAppointment.copy(id = 0, clientId = newClientId)
-                )
-                appointmentIdMap[backupAppointment.id] = newId
-            }
-            
-            // 4. Insert appointment services (depends on appointments and service tags)
-            val appointmentServicesToInsert = mutableListOf<AppointmentServiceEntity>()
-            payload.appointmentServices.forEach { backupService ->
-                val newAppointmentId = appointmentIdMap[backupService.appointmentId] ?: return@forEach
-                val newServiceTagId = serviceTagIdMap[backupService.serviceTagId] ?: return@forEach
-                
-                appointmentServicesToInsert.add(
-                    AppointmentServiceEntity(
-                        id = 0,
-                        appointmentId = newAppointmentId,
-                        serviceTagId = newServiceTagId,
-                        priceForThisTag = backupService.priceForThisTag,
-                        sortOrder = backupService.sortOrder
+                // 3. Insert appointments (depends on clients)
+                payload.appointments.forEach { backupAppointment ->
+                    val newClientId = clientIdMap[backupAppointment.clientId] ?: backupAppointment.clientId
+                    val newId = repository.insertAppointment(
+                        backupAppointment.copy(id = 0, clientId = newClientId)
                     )
-                )
-            }
-            // Insert all appointment services at once
-            if (appointmentServicesToInsert.isNotEmpty()) {
-                repository.insertAppointmentServices(appointmentServicesToInsert)
-            }
+                    appointmentIdMap[backupAppointment.id] = newId
+                }
             
-            // 5. Insert expenses with their items (depends on nothing)
-            // Group items by expense ID before inserting expenses
-            val expenseItemsByExpense = payload.expenseItems.groupBy { it.expenseId }
-            
-            payload.expenses.forEach { backupExpense ->
-                val newId = repository.insertExpense(backupExpense.copy(id = 0))
-                expenseIdMap[backupExpense.id] = newId
-            }
-            
-            // Insert expense items after all expenses are created
-            expenseItemsByExpense.forEach { (oldExpenseId, items) ->
-                val newExpenseId = expenseIdMap[oldExpenseId] ?: return@forEach
-                val expense = repository.getExpenseById(newExpenseId) ?: return@forEach
-                val newItems = items.map { item ->
-                    ExpenseItemEntity(
-                        id = 0,
-                        expenseId = newExpenseId,
-                        tag = item.tag,
-                        amountCents = item.amountCents
+                // 4. Insert appointment services (depends on appointments and service tags)
+                val appointmentServicesToInsert = mutableListOf<AppointmentServiceEntity>()
+                payload.appointmentServices.forEach { backupService ->
+                    val newAppointmentId = appointmentIdMap[backupService.appointmentId] ?: return@forEach
+                    val newServiceTagId = serviceTagIdMap[backupService.serviceTagId] ?: return@forEach
+                
+                    appointmentServicesToInsert.add(
+                        AppointmentServiceEntity(
+                            id = 0,
+                            appointmentId = newAppointmentId,
+                            serviceTagId = newServiceTagId,
+                            priceForThisTag = backupService.priceForThisTag,
+                            sortOrder = backupService.sortOrder
+                        )
                     )
                 }
-                repository.saveExpenseWithItems(expense, newItems)
+                // Insert all appointment services at once
+                if (appointmentServicesToInsert.isNotEmpty()) {
+                    repository.insertAppointmentServices(appointmentServicesToInsert)
+                }
+            
+                // 5. Insert expenses with their items (depends on nothing)
+                // Group items by expense ID before inserting expenses
+                val expenseItemsByExpense = payload.expenseItems.groupBy { it.expenseId }
+            
+                payload.expenses.forEach { backupExpense ->
+                    val newId = repository.insertExpense(backupExpense.copy(id = 0))
+                    expenseIdMap[backupExpense.id] = newId
+                }
+            
+                // Insert expense items after all expenses are created
+                expenseItemsByExpense.forEach { (oldExpenseId, items) ->
+                    val newExpenseId = expenseIdMap[oldExpenseId] ?: return@forEach
+                    val expense = repository.getExpenseById(newExpenseId) ?: return@forEach
+                    val newItems = items.map { item ->
+                        ExpenseItemEntity(
+                            id = 0,
+                            expenseId = newExpenseId,
+                            tag = item.tag,
+                            amountCents = item.amountCents
+                        )
+                    }
+                    repository.saveExpenseWithItems(expense, newItems)
+                }
             }
             
             Log.d(TAG, "Backup restored successfully")

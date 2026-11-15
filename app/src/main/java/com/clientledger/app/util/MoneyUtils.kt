@@ -49,7 +49,7 @@ object MoneyUtils {
     }
 
     fun rublesToCents(rubles: Double): Long {
-        return (rubles * 100).toLong()
+        return Math.round(rubles * 100)
     }
 
     fun centsToRubles(cents: Long): Double {

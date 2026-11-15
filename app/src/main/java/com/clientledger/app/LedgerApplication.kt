@@ -2,6 +2,7 @@ package com.clientledger.app
 
 import android.app.Application
 import android.content.pm.PackageManager
+import androidx.room.InvalidationTracker
 import com.clientledger.app.data.backup.BackupScheduler
 import com.clientledger.app.data.backup.GoogleDriveBackupService
 import com.clientledger.app.data.database.AppDatabase
@@ -20,6 +21,7 @@ class LedgerApplication : Application() {
     val database by lazy { AppDatabase.getDatabase(this) }
     val repository by lazy {
         LedgerRepository(
+            database,
             database.clientDao(),
             database.appointmentDao(),
             database.expenseDao(),
@@ -47,8 +49,33 @@ class LedgerApplication : Application() {
         BackupScheduler(this, repository, appVersion, googleDriveBackupService)
     }
     
+    /**
+     * Следит за изменениями в базе (добавление, правка, удаление, отмена записи и т.д.)
+     * и запускает автоматический бэкап. Раньше бэкап вызывался только с трёх экранов
+     * сохранения, и удаления/отмены в него не попадали.
+     */
+    private val backupOnChangeObserver = object : InvalidationTracker.Observer(
+        arrayOf(
+            "clients",
+            "appointments",
+            "appointment_services",
+            "expenses",
+            "expense_items",
+            "service_tags"
+        )
+    ) {
+        override fun onInvalidated(tables: Set<String>) {
+            backupScheduler.scheduleBackup()
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
+
+        // addObserver может обращаться к БД, поэтому не на главном потоке
+        applicationScope.launch {
+            database.invalidationTracker.addObserver(backupOnChangeObserver)
+        }
         
         // Initialize notification channel
         com.clientledger.app.util.NotificationHelper.createNotificationChannel(this)

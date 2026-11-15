@@ -142,7 +142,16 @@ fun ClientDetailScreen(
                 AlertDialog(
                     onDismissRequest = { showDeleteDialog = false },
                     title = { Text("Удалить клиента?") },
-                    text = { Text("Вы уверены, что хотите удалить этого клиента?") },
+                    text = {
+                        Text(
+                            if (appointmentsCount > 0) {
+                                "Вместе с клиентом будут удалены все его визиты ($appointmentsCount) " +
+                                    "и доход от них исчезнет из статистики. Это нельзя отменить."
+                            } else {
+                                "Вы уверены, что хотите удалить этого клиента?"
+                            }
+                        )
+                    },
                     confirmButton = {
                         TextButton(
                             onClick = {

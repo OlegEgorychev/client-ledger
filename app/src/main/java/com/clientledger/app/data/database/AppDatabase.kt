@@ -27,7 +27,7 @@ import com.clientledger.app.data.entity.ServiceTagEntity
         AppointmentServiceEntity::class
     ],
     version = 9,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun clientDao(): ClientDao
@@ -48,7 +48,11 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "client_ledger_database"
                 )
-                .fallbackToDestructiveMigration() // Разрешаем автоматическое пересоздание БД при изменении схемы
+                // ВАЖНО: начиная с версии 9 база больше НЕ пересоздаётся при изменении схемы.
+                // Любое изменение сущностей = повысить version и добавить Migration(N, N+1)
+                // через .addMigrations(...). Схемы каждой версии сохраняются в app/schemas.
+                // Пересоздание разрешено только для старых версий 1–8 (схемы которых не сохранились).
+                .fallbackToDestructiveMigrationFrom(1, 2, 3, 4, 5, 6, 7, 8)
                 .build()
                 INSTANCE = instance
                 

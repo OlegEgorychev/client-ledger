@@ -90,6 +90,13 @@ android {
     }
 }
 
+kapt {
+    arguments {
+        // Room сохраняет схему каждой версии БД сюда — нужно для написания миграций
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+}
+
 dependencies {
     // Core Android
     implementation("androidx.core:core-ktx:1.12.0")

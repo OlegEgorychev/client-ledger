@@ -25,11 +25,14 @@ import com.clientledger.app.data.entity.ServiceTagEntity
 import com.clientledger.app.data.testdata.TestDataGenerator
 import com.clientledger.app.util.DateUtils
 import com.clientledger.app.util.toDateKey
+import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 
 class LedgerRepository(
+    private val database: RoomDatabase,
     private val clientDao: ClientDao,
     private val appointmentDao: AppointmentDao,
     private val expenseDao: ExpenseDao,
@@ -37,6 +40,12 @@ class LedgerRepository(
     private val serviceTagDao: ServiceTagDao,
     private val appointmentServiceDao: AppointmentServiceDao
 ) {
+    /**
+     * Выполнить несколько операций как одну: либо все применятся, либо ни одна.
+     * Защищает от «половинчатых» данных при сбое посреди сохранения.
+     */
+    suspend fun <R> inTransaction(block: suspend () -> R): R = database.withTransaction { block() }
+
     // Clients
     fun getAllClients(): Flow<List<ClientEntity>> = clientDao.getAllClients()
     
@@ -89,7 +98,7 @@ class LedgerRepository(
     suspend fun updateAppointment(appointment: AppointmentEntity) =
         appointmentDao.updateAppointment(appointment)
     
-    suspend fun deleteAppointment(appointment: AppointmentEntity) {
+    suspend fun deleteAppointment(appointment: AppointmentEntity): Unit = inTransaction {
         // Delete associated services first (CASCADE should handle this, but explicit for clarity)
         appointmentServiceDao.deleteServicesForAppointment(appointment.id)
         appointmentDao.deleteAppointment(appointment)
@@ -111,7 +120,7 @@ class LedgerRepository(
     
     suspend fun updateExpense(expense: ExpenseEntity) = expenseDao.updateExpense(expense)
     
-    suspend fun deleteExpense(expense: ExpenseEntity) {
+    suspend fun deleteExpense(expense: ExpenseEntity): Unit = inTransaction {
         expenseItemDao.deleteItemsForExpense(expense.id)
         expenseDao.deleteExpense(expense)
     }
@@ -119,7 +128,7 @@ class LedgerRepository(
     suspend fun saveExpenseWithItems(
         expense: ExpenseEntity,
         items: List<ExpenseItemEntity>
-    ): Long {
+    ): Long = inTransaction {
         val expenseId = if (expense.id == 0L) {
             expenseDao.insertExpense(expense)
         } else {
@@ -131,7 +140,7 @@ class LedgerRepository(
         val itemsWithExpenseId = items.map { it.copy(expenseId = expenseId) }
         expenseItemDao.insertExpenseItems(itemsWithExpenseId)
         
-        return expenseId
+        expenseId
     }
 
     // Statistics
@@ -359,13 +368,28 @@ class LedgerRepository(
     suspend fun saveAppointmentWithServices(
         appointment: AppointmentEntity,
         services: List<AppointmentServiceEntity>
-    ): Long {
+    ): Long = inTransaction {
         val appointmentId = if (appointment.id == 0L) {
             appointmentDao.insertAppointment(appointment)
         } else {
+            // Экран редактирования не знает про статус/отмену записи, поэтому
+            // сохраняем эти поля из базы — иначе отменённая запись «оживала»
+            // и снова попадала в доход.
+            val existing = appointmentDao.getAppointmentById(appointment.id)
+            val merged = if (existing != null) {
+                appointment.copy(
+                    status = existing.status,
+                    canceledAt = existing.canceledAt,
+                    cancelReason = existing.cancelReason,
+                    isTestData = existing.isTestData,
+                    createdAt = existing.createdAt
+                )
+            } else {
+                appointment
+            }
             // Delete existing services before updating
             appointmentServiceDao.deleteServicesForAppointment(appointment.id)
-            appointmentDao.updateAppointment(appointment)
+            appointmentDao.updateAppointment(merged)
             appointment.id
         }
         
@@ -373,7 +397,7 @@ class LedgerRepository(
         val servicesWithAppointmentId = services.map { it.copy(appointmentId = appointmentId) }
         appointmentServiceDao.insertServices(servicesWithAppointmentId)
         
-        return appointmentId
+        appointmentId
     }
     
     // For backup/restore: insert appointment services directly
@@ -435,7 +459,7 @@ class LedgerRepository(
     suspend fun getAllAppointmentServicesSync(): List<AppointmentServiceEntity> = appointmentServiceDao.getAllAppointmentServices()
     
     // Backup/Restore: Clear all data (for restore operation)
-    suspend fun clearAllDataForRestore() {
+    suspend fun clearAllDataForRestore(): Unit = inTransaction {
         // Delete in reverse order of dependencies to respect foreign keys
         // 1. Appointment services (depends on appointments and service tags)
         getAllAppointmentServicesSync().forEach { appointmentServiceDao.deleteService(it) }

@@ -32,6 +32,7 @@ class BackupScheduler(
      * Trigger a backup after data change.
      * This will cancel any pending backup and schedule a new one after debounce delay.
      */
+    @Synchronized
     fun scheduleBackup() {
         // Cancel any existing pending backup
         backupJob?.cancel()
@@ -40,6 +41,13 @@ class BackupScheduler(
         backupJob = scope.launch {
             try {
                 delay(DEBOUNCE_DELAY_MS)
+                // Не делаем автобэкап пустой базы (например, на новом телефоне сразу
+                // после установки создаются стандартные услуги) — иначе пустой бэкап
+                // стал бы «самым свежим» и мог бы быть выбран при восстановлении.
+                if (repository.isDatabaseEmpty()) {
+                    Log.d(TAG, "Skip automatic backup: database is empty")
+                    return@launch
+                }
                 performBackup()
             } catch (e: CancellationException) {
                 // Backup was cancelled, this is expected when new changes arrive

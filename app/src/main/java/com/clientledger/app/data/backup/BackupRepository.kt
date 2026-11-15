@@ -27,7 +27,7 @@ private const val BACKUP_DIR = "backups"
 private const val LATEST_BACKUP_FILE = "latest_backup.json"
 private const val HISTORY_DIR = "history"
 private const val MAX_HISTORY_BACKUPS = 30
-private const val CURRENT_SCHEMA_VERSION = 9
+private const val CURRENT_SCHEMA_VERSION = 10
 
 /**
  * Repository for creating, reading, and restoring backups.
@@ -65,6 +65,7 @@ class BackupRepository(
         val expenseItems = repository.getAllExpenseItemsSync()
         val serviceTags = repository.getAllTagsSync()
         val appointmentServices = repository.getAllAppointmentServicesSync()
+        val personalEvents = repository.getAllPersonalEventsSync()
         
         // Create backup payload
         BackupPayload(
@@ -76,7 +77,8 @@ class BackupRepository(
             expenses = expenses,
             expenseItems = expenseItems,
             serviceTags = serviceTags,
-            appointmentServices = appointmentServices
+            appointmentServices = appointmentServices,
+            personalEvents = personalEvents
         )
     }
     
@@ -263,6 +265,11 @@ class BackupRepository(
                         )
                     }
                     repository.saveExpenseWithItems(expense, newItems)
+                }
+
+                // 6. Personal events (no dependencies; absent in backups before schema 10)
+                payload.personalEvents.orEmpty().forEach { backupEvent ->
+                    repository.insertPersonalEvent(backupEvent.copy(id = 0))
                 }
             }
             

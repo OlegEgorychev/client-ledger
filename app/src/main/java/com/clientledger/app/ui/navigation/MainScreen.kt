@@ -24,6 +24,7 @@ import com.clientledger.app.ui.viewmodel.CalendarViewModel
 import com.clientledger.app.ui.viewmodel.ClientsViewModel
 import com.clientledger.app.ui.viewmodel.StatsViewModel
 import com.clientledger.app.ui.screen.calendar.AppointmentEditScreen
+import com.clientledger.app.ui.screen.calendar.PersonalEventEditScreen
 import com.clientledger.app.ui.screen.calendar.ExpenseEditScreen
 import com.clientledger.app.ui.screen.settings.SettingsScreen
 import com.clientledger.app.ui.screen.reminders.SmsReminderScreen
@@ -211,6 +212,12 @@ fun MainScreen(
                         onAddExpense = {
                             navController.navigate("expense_edit/null/${localDate.toString()}")
                         },
+                        onAddPersonalEvent = { day ->
+                            navController.navigate("personal_event_edit/null/${day}")
+                        },
+                        onPersonalEventClick = { eventId ->
+                            navController.navigate("personal_event_edit/$eventId/${localDate}")
+                        },
                         onDateChange = null, // Переключение дней происходит внутри экрана через состояние
                         onSettingsClick = {
                             navController.navigate("settings")
@@ -245,6 +252,9 @@ fun MainScreen(
                     onAddExpense = { date ->
                         // Use selected date from calendar, fallback to today if null
                         navController.navigate("expense_edit/null/${date.toString()}")
+                    },
+                    onAddPersonalEvent = { date ->
+                        navController.navigate("personal_event_edit/null/${date}")
                     },
                     onIncomeDetailClick = { period, date, yearMonth, year ->
                         navController.navigate("income_detail/$period/${date.toString()}/${yearMonth.year}-${yearMonth.monthValue}/$year")
@@ -466,6 +476,20 @@ fun MainScreen(
                 }
             }
             
+            // Personal Event Edit Screen (личное дело)
+            composable("personal_event_edit/{eventId}/{date}") { backStackEntry ->
+                val eventId = backStackEntry.arguments?.getString("eventId")?.toLongOrNull()
+                val dateStr = backStackEntry.arguments?.getString("date")
+                dateStr?.let { date ->
+                    PersonalEventEditScreen(
+                        eventId = eventId,
+                        date = LocalDate.parse(date),
+                        repository = repository,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+
             // Settings Screen
             composable("settings") {
                 SettingsScreen(

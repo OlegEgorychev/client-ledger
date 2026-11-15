@@ -10,7 +10,8 @@ import androidx.compose.ui.unit.dp
 fun AddChooserDialog(
     onDismiss: () -> Unit,
     onAddAppointment: () -> Unit,
-    onAddExpense: () -> Unit
+    onAddExpense: () -> Unit,
+    onAddPersonalEvent: (() -> Unit)? = null
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -37,6 +38,17 @@ fun AddChooserDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Расход")
+                }
+                if (onAddPersonalEvent != null) {
+                    TextButton(
+                        onClick = {
+                            onDismiss()
+                            onAddPersonalEvent()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Личное дело")
+                    }
                 }
             }
         },

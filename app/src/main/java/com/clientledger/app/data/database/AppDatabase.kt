@@ -1,5 +1,6 @@
 package com.clientledger.app.data.database
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -9,12 +10,14 @@ import com.clientledger.app.data.dao.AppointmentServiceDao
 import com.clientledger.app.data.dao.ClientDao
 import com.clientledger.app.data.dao.ExpenseDao
 import com.clientledger.app.data.dao.ExpenseItemDao
+import com.clientledger.app.data.dao.PersonalEventDao
 import com.clientledger.app.data.dao.ServiceTagDao
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.AppointmentServiceEntity
 import com.clientledger.app.data.entity.ClientEntity
 import com.clientledger.app.data.entity.ExpenseEntity
 import com.clientledger.app.data.entity.ExpenseItemEntity
+import com.clientledger.app.data.entity.PersonalEventEntity
 import com.clientledger.app.data.entity.ServiceTagEntity
 
 @Database(
@@ -24,10 +27,15 @@ import com.clientledger.app.data.entity.ServiceTagEntity
         ExpenseEntity::class,
         ExpenseItemEntity::class,
         ServiceTagEntity::class,
-        AppointmentServiceEntity::class
+        AppointmentServiceEntity::class,
+        PersonalEventEntity::class
     ],
-    version = 9,
-    exportSchema = true
+    version = 10,
+    exportSchema = true,
+    autoMigrations = [
+        // 9 -> 10: новая таблица personal_events (личные дела). Данные не трогаются.
+        AutoMigration(from = 9, to = 10)
+    ]
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun clientDao(): ClientDao
@@ -36,6 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun expenseItemDao(): ExpenseItemDao
     abstract fun serviceTagDao(): ServiceTagDao
     abstract fun appointmentServiceDao(): AppointmentServiceDao
+    abstract fun personalEventDao(): PersonalEventDao
 
     companion object {
         @Volatile

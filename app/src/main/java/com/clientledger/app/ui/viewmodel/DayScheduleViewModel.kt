@@ -4,11 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.clientledger.app.data.entity.AppointmentEntity
 import com.clientledger.app.data.entity.ExpenseEntity
+import com.clientledger.app.data.entity.PersonalEventEntity
 import com.clientledger.app.data.repository.LedgerRepository
 import com.clientledger.app.util.toDateKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.combine
 import java.time.LocalDate
@@ -24,6 +26,7 @@ data class DayScheduleUiState(
     val date: LocalDate,
     val appointments: List<AppointmentWithClient> = emptyList(),
     val expenses: List<ExpenseEntity> = emptyList(),
+    val personalEvents: List<PersonalEventEntity> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -52,17 +55,23 @@ class DayScheduleViewModel(
         }
     }
 
+    // Подписка на данные текущего дня. При смене дня старую отменяем —
+    // иначе при изменении БД старая подписка перезаписывала экран данными прошлого дня.
+    private var loadJob: Job? = null
+
     private fun loadAppointments() {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
         val dateKey = date.toDateKey()
         
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             try {
                 // Combine appointments and expenses flows
                 combine(
                     repository.getAppointmentsByDate(dateKey),
-                    repository.getExpensesByDate(dateKey)
-                ) { appointments, expenses ->
+                    repository.getExpensesByDate(dateKey),
+                    repository.getPersonalEventsByDate(dateKey)
+                ) { appointments, expenses, personalEvents ->
                     // Загружаем имена клиентов для каждой записи
                     val appointmentsWithClients = appointments.map { appointment ->
                         val client = repository.getClientById(appointment.clientId)
@@ -79,9 +88,12 @@ class DayScheduleViewModel(
                     _uiState.value = _uiState.value.copy(
                         appointments = appointmentsWithClients,
                         expenses = sortedExpenses,
+                        personalEvents = personalEvents,
                         isLoading = false
                     )
                 }.collect { }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // отмена при смене дня — не ошибка
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,

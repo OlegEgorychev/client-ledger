@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Send
@@ -129,11 +131,13 @@ fun AppointmentNotificationScreen(
             else -> {
                 val appointment = appointmentWithClient!!
                 val hasPhone = !appointment.clientPhone.isNullOrBlank()
+                val scrollState = rememberScrollState()
                 
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(paddingValues)
+                        .verticalScroll(scrollState)
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
